@@ -17,7 +17,7 @@ describe('listing extraction', () => {
     expect(l.suburb.value).toBe('Richmond');
     expect(l.state.value).toBe('VIC');
     expect(l.postcode.value).toBe('3121');
-    expect(l.address.value).toMatch(/^12\/45 Smith Street/);
+    expect(l.address.value).toBe('12/45 Smith Street, Richmond VIC 3121');
     expect(l.propertyType.value).toBe('Apartment');
     expect(l.priceCents.value).toBe(65000000);
     expect(l.priceMaxCents.value).toBe(70000000);

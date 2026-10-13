@@ -172,6 +172,7 @@ export function MoneyInput({
   placeholder,
   disabled,
   suffix,
+  ariaLabel,
 }: {
   label?: ReactNode;
   value: Cents | null;
@@ -183,6 +184,7 @@ export function MoneyInput({
   placeholder?: string;
   disabled?: boolean;
   suffix?: string;
+  ariaLabel?: string;
 }) {
   const id = useId();
   const fmt = (v: Cents | null) => (v === null ? '' : formatMoney(v, { cents: v % 100 !== 0 }).replace('$', ''));
@@ -217,6 +219,7 @@ export function MoneyInput({
       <input
         id={id}
         inputMode="decimal"
+        aria-label={label ? undefined : ariaLabel}
         disabled={disabled}
         placeholder={placeholder}
         className={cx(inputBase, 'num pl-6', suffix && 'pr-14', error && 'border-bad')}

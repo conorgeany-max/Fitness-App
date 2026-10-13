@@ -121,7 +121,13 @@ export function parseListingText(text: string, url?: string): PropertyListing {
   const addr = t.match(
     /\b((?:\d+[A-Za-z]?\/)?\d+[A-Za-z]?(?:-\d+)?\s+[A-Z][A-Za-z' ]{1,40}\s(?:Street|St|Road|Rd|Avenue|Ave|Drive|Dr|Court|Ct|Place|Pl|Lane|Ln|Crescent|Cres|Parade|Pde|Boulevard|Blvd|Way|Close|Cl|Terrace|Tce|Grove|Gr|Highway|Hwy|Circuit|Cct|Esplanade|Esp|Square|Sq|Rise|Walk)\b\.?(?:,?\s+[A-Z][A-Za-z' ]{2,40})?(?:,?\s+(?:VIC|NSW|QLD|WA|SA|TAS|ACT|NT)\s+\d{4})?)/,
   );
-  if (addr) l.address = found(addr[1].trim(), addr[0]);
+  if (addr) {
+    let a = addr[1].trim();
+    // The suburb pattern can swallow a trailing state code and stop before the postcode.
+    const pc = l.postcode.value;
+    if (pc && new RegExp(`\\b(${STATES.join('|')})$`).test(a) && t.includes(`${a} ${pc}`)) a = `${a} ${pc}`;
+    l.address = found(a, addr[0]);
+  }
 
   // ---- Property type
   const type = t.match(/\b(house|apartment|unit|townhouse|villa|duplex|terrace|semi-detached|land|acreage|studio|penthouse)\b/i);

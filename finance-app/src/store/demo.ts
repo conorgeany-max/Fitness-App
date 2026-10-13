@@ -7,7 +7,7 @@ import { BUILTIN_RULES } from '@/domain/categories';
 import { PRESET_ASSUMPTIONS } from '@/domain/forecast';
 import { categoryMeta } from '@/domain/holdingCategories';
 import { takeSnapshot } from '@/domain/history';
-import { emptyListing } from '@/domain/property/listingParser';
+import { parseListingText } from '@/domain/property/listingParser';
 import { applyCategorisation } from '@/domain/transactions';
 import { EMPTY_INCOME } from '@/domain/tax/salary';
 import type { Holding, HoldingCategory, Ownership, Transaction, ValuationEntry, WorkspaceData } from '@/domain/types';
@@ -206,34 +206,30 @@ export function buildDemoWorkspace(today: ISODate = todayISO()): WorkspaceData {
     ],
   });
 
-  const listing = emptyListing();
+  // Run the real parser over fictional listing text, so the review screen shows genuine evidence.
+  const rawText = [
+    'DEMO LISTING (fictional, not a real property)',
+    '4/22 Example Street, Coburg VIC 3058',
+    'Apartment · 2 bed 1 bath 1 car',
+    'Price guide: $560,000 - $600,000',
+    'Owners corporation: $800 per quarter',
+    'Council rates: $1,450 p.a.',
+    'Water rates: $210 per quarter',
+    'Currently leased at $560 per week until March.',
+  ].join('\n');
+  const demoListing = parseListingText(rawText);
   ws.properties = [
     {
       id: uid('prop'),
-      name: 'Demo listing — 3 bed house, Coburg VIC',
-      rawText: 'DEMO LISTING (fictional)\n17 Example Street, Coburg VIC 3058\nHouse\nPrice guide: $1,050,000 - $1,150,000\n3 bed 2 bath 1 car\nCouncil rates: $2,100 p.a.\nWater rates: $260 per quarter',
-      listing: {
-        ...listing,
-        address: { value: '17 Example Street, Coburg VIC 3058', status: 'extracted' },
-        suburb: { value: 'Coburg', status: 'extracted' },
-        state: { value: 'VIC', status: 'extracted' },
-        postcode: { value: '3058', status: 'extracted' },
-        propertyType: { value: 'House', status: 'extracted' },
-        priceCents: { value: 1_050_000_00, status: 'extracted' },
-        priceMaxCents: { value: 1_150_000_00, status: 'extracted' },
-        bedrooms: { value: 3, status: 'extracted' },
-        bathrooms: { value: 2, status: 'extracted' },
-        parking: { value: 1, status: 'extracted' },
-        councilRatesAnnualCents: { value: 2_100_00, status: 'extracted' },
-        waterAnnualCents: { value: 1_040_00, status: 'extracted' },
-      },
-      settings: defaultPurchaseSettings(),
+      name: 'Demo listing: 2 bed apartment, Coburg VIC',
+      rawText,
+      listing: demoListing,
+      settings: { ...defaultPurchaseSettings(), intendedUse: 'investment', depositCents: 50_000_00 },
       shortlisted: true,
       createdAt: now,
       updatedAt: now,
     },
   ];
-  ws.properties[0].settings.depositCents = 220_000_00;
   // Pretend the app has been in use for six months, so recorded and reconstructed history both show.
   for (let i = 6; i >= 1; i--) {
     const end = monthEnd(monthKey(addMonths(today, -i)));

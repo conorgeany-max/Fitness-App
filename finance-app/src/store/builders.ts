@@ -2,6 +2,7 @@
  * Glue between the stored workspace and the pure calculation engines.
  */
 import { addDays, monthKey, type ISODate } from '@/domain/dates';
+import { formatMoney } from '@/domain/money';
 import { buildBudgetReport } from '@/domain/budget';
 import { runForecast, type ForecastInput, type ForecastResult } from '@/domain/forecast';
 import { goalProgress } from '@/domain/goals';
@@ -80,6 +81,7 @@ export function householdFinancials(_data: WorkspaceData, d: Derived): Household
   if (d.livingCosts.basis === 'transactions') basis.push(`Living costs: average non-housing spending over ${d.livingCosts.months} month(s) of transactions.`);
   else if (d.livingCosts.basis === 'budget') basis.push('Living costs: from your monthly budget.');
   else basis.push('No living-cost data — enter an override for a meaningful result.');
+  if (d.loanRepaymentsMonthlyCents > 0) basis.push(`Existing loan repayments of ${formatMoney(d.loanRepaymentsMonthlyCents)}/month continue after the purchase. If you are selling your current home, set "Other debt repayments" to exclude them.`);
   const rentAvg = Math.round(
     d.completeMonths.reduce((a, m) => a - (d.monthly.household[d.months.indexOf(m)]?.byCategory.get('exp-rent') ?? 0), 0) / Math.max(1, d.completeMonths.length),
   );
@@ -89,7 +91,9 @@ export function householdFinancials(_data: WorkspaceData, d: Derived): Household
     livingCostsMonthlyCents: d.livingCosts.monthlyCents,
     essentialLivingMonthlyCents: d.livingCosts.essentialCents,
     liquidSavingsCents: bs.liquidCents,
-    otherDebtRepaymentsMonthlyCents: d.otherDebtRepaymentsMonthlyCents,
+    // Existing home loans keep being paid alongside a new purchase. If the purchase replaces
+    // your current home (sell and buy), override this in the analysis.
+    otherDebtRepaymentsMonthlyCents: d.otherDebtRepaymentsMonthlyCents + d.loanRepaymentsMonthlyCents,
     netWorthCents: bs.netWorthCents,
     currentRentMonthlyCents: Math.max(0, rentAvg),
     basis,
