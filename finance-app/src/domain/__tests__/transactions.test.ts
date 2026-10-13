@@ -63,6 +63,19 @@ describe('cash-flow summaries', () => {
     expect(me.netCashFlowCents + pa.netCashFlowCents).toBe(hh.netCashFlowCents);
   });
 
+  it('reports the principal part of a loan repayment as a debt repayment, not consumption', () => {
+    const loan = holding('mortgage-owner', 500000, OWN_JOINT, { id: 'loan' });
+    const t = [
+      txn('p1', '2026-09-01', -3000, 'acc-joint', { transfer: 'internal' }),
+      txn('p2', '2026-09-01', 3000, 'loan', { transfer: 'internal' }),
+      txn('p3', '2026-09-01', -2400, 'loan', { categoryId: 'exp-housing' }),
+    ];
+    const s = summarise(t, DEFAULT_CATEGORIES, [...accounts, loan], 'household', { month: '2026-09' });
+    expect(s.essentialCents).toBe(240000); // interest is an expense
+    expect(s.debtRepaymentCents).toBe(60000); // principal reduces the liability
+    expect(s.netCashFlowCents).toBe(-300000); // the whole repayment left the household's cash
+  });
+
   it('handles an empty month and negative cash flow', () => {
     const empty = summarise([], DEFAULT_CATEGORIES, accounts, 'household', { month: '2026-09' });
     expect(empty.savingsRate).toBeNull();
@@ -105,6 +118,17 @@ describe('duplicates and transfers', () => {
     expect(s).toHaveLength(2);
     expect(s.find((x) => x.outId === 'a')!.kind).toBe('internal');
     expect(s.find((x) => x.outId === 'c')!.kind).toBe('between-partners');
+  });
+
+  it('does not re-suggest pairs already marked as transfers on both sides', () => {
+    const t = [
+      txn('a', '2026-09-03', -1000, 'acc-me', { description: 'TRANSFER TO SAVINGS', transfer: 'internal' }),
+      txn('b', '2026-09-03', 1000, 'acc-me-sav', { description: 'TRANSFER FROM', transfer: 'internal' }),
+      txn('c', '2026-09-05', -400, 'acc-me', { description: 'TO SAVINGS', transfer: 'internal' }),
+      txn('d', '2026-09-05', 400, 'acc-me-sav', { description: 'DEPOSIT' }),
+    ];
+    const s = detectTransfers(t, accounts);
+    expect(s.map((x) => x.outId)).toEqual(['c']);
   });
 });
 

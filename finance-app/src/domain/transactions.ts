@@ -223,6 +223,11 @@ export function detectTransfers(transactions: Transaction[], accounts: Holding[]
     if (matches.length === 0) continue;
     matches.sort((a, b) => Math.abs(diffDays(o.date, a.date)) - Math.abs(diffDays(o.date, b.date)));
     const m = matches[0];
+    // Both sides already marked as transfers (by hand or by a rule): nothing left to decide.
+    if (o.transfer !== 'none' && m.transfer !== 'none') {
+      used.add(m.id);
+      continue;
+    }
     used.add(m.id);
     const kind = transferKindBetween(owned.get(o.accountId!)!.ownership, owned.get(m.accountId!)!.ownership);
     const worded = TRANSFER_WORDS.test(o.description) || TRANSFER_WORDS.test(m.description);
@@ -300,6 +305,14 @@ export function summarise(
     byCategory: new Map(),
     transactionCount: 0,
   };
+  // Repayments into loan accounts are transfers; their principal portion (payment minus the
+  // interest charged on that loan in the period) is reported as a debt repayment outflow.
+  const loanPayments = new Map<string, Cents>();
+  const loanInterest = new Map<string, Cents>();
+  const isLoan = (id: string | null) => {
+    const acc = id ? accMap.get(id) : undefined;
+    return !!acc && acc.kind === 'liability' && acc.category !== 'credit-card' && acc.category !== 'bnpl';
+  };
   for (const t of transactions) {
     if (t.excluded) continue;
     if (filter.month && monthKey(t.date) !== filter.month) continue;
@@ -319,9 +332,11 @@ export function summarise(
       continue;
     }
     if (t.transfer === 'internal') {
+      if (amt > 0 && isLoan(t.accountId)) loanPayments.set(t.accountId!, (loanPayments.get(t.accountId!) ?? 0) + amt);
       continue; // between our own accounts: no effect on income, spending or net cash flow
     }
     const cat = t.categoryId ? catMap.get(t.categoryId) : undefined;
+    if (cat?.treatment === 'expense' && amt < 0 && isLoan(t.accountId)) loanInterest.set(t.accountId!, (loanInterest.get(t.accountId!) ?? 0) - amt);
     s.netCashFlowCents += amt;
     if (!cat) {
       if (amt < 0) s.uncategorisedOutCents += -amt;
@@ -350,6 +365,11 @@ export function summarise(
         s.netCashFlowCents -= amt; // a movement between own accounts is not a net cash flow
         break;
     }
+  }
+  for (const [acc, paid] of loanPayments) {
+    const principal = Math.max(0, paid - (loanInterest.get(acc) ?? 0));
+    s.debtRepaymentCents += principal;
+    s.netCashFlowCents -= principal;
   }
   // Uncategorised outflows are treated as discretionary consumption until reviewed (conservative).
   s.consumptionCents = s.essentialCents + s.discretionaryCents + s.uncategorisedOutCents;
@@ -415,6 +435,12 @@ const CADENCES: { f: RecurringCandidate['frequency']; days: number; tol: number 
   { f: 'annually', days: 365, tol: 20 },
 ];
 
+/** 'NETFLIX.COM' → 'Netflix.com': bank feeds shout; labels shouldn't. */
+export function tidyLabel(s: string): string {
+  if (s !== s.toUpperCase()) return s;
+  return s.toLowerCase().replace(/(^|[\s/&-])([a-z])/g, (_, p: string, c: string) => p + c.toUpperCase());
+}
+
 export function detectRecurring(transactions: Transaction[], minOccurrences = 3): RecurringCandidate[] {
   const groups = new Map<string, Transaction[]>();
   for (const t of transactions) {
@@ -442,7 +468,7 @@ export function detectRecurring(transactions: Transaction[], minOccurrences = 3)
     const last = list[list.length - 1];
     out.push({
       key,
-      label: last.merchant ?? key,
+      label: last.merchant ?? tidyLabel(key),
       averageCents: avg,
       cadenceDays: cadence.days,
       frequency: cadence.f,

@@ -153,9 +153,9 @@ export function parseListingText(text: string, url?: string): PropertyListing {
     const m = t.match(re);
     return m ? found(Number(m[1] ?? m[2]), m[0]) : none();
   };
-  l.bedrooms = num(/\b(\d{1,2})\s*(?:bed(?:room)?s?|br)\b|bed(?:room)?s?\s*[:\-]?\s*(\d{1,2})\b/i);
-  l.bathrooms = num(/\b(\d{1,2})\s*(?:bath(?:room)?s?|ba)\b|bath(?:room)?s?\s*[:\-]?\s*(\d{1,2})\b/i);
-  l.parking = num(/\b(\d{1,2})\s*(?:car(?:\s?spaces?|s|\s?park(?:s|ing)?)?|garages?|parking(?: spaces?)?)\b|(?:car\s?spaces?|parking|garage)\s*[:\-]?\s*(\d{1,2})\b/i);
+  l.bedrooms = num(/\b(\d{1,2})\s*(?:bed(?:room)?s?|br)\b|bed(?:room)?s?\s*[:-]?\s*(\d{1,2})\b/i);
+  l.bathrooms = num(/\b(\d{1,2})\s*(?:bath(?:room)?s?|ba)\b|bath(?:room)?s?\s*[:-]?\s*(\d{1,2})\b/i);
+  l.parking = num(/\b(\d{1,2})\s*(?:car(?:\s?spaces?|s|\s?park(?:s|ing)?)?|garages?|parking(?: spaces?)?)\b|(?:car\s?spaces?|parking|garage)\s*[:-]?\s*(\d{1,2})\b/i);
   const land = t.match(/\b([\d,]{2,7}(?:\.\d+)?)\s*(?:m2|m²|sqm|sq\.? ?m|square met(?:re|er)s)\b/i);
   if (land) l.landSizeSqm = found(Number(land[1].replace(/,/g, '')), land[0]);
 
