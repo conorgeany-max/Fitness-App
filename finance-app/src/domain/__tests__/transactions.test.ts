@@ -106,6 +106,14 @@ describe('duplicates and transfers', () => {
     expect(r.added).toHaveLength(1);
   });
 
+  it('flags in-batch repeats for review instead of dropping them', () => {
+    const coffee = (id: string) => txn(id, '2026-09-01', -5, 'acc-me', { description: 'CAFE', externalId: `x-${id}` });
+    const r = mergeTransactions([], [coffee('i1'), coffee('i2')]);
+    expect(r.added).toHaveLength(2);
+    expect(r.flagged).toHaveLength(1);
+    expect(r.flagged[0].possibleDuplicateOf).toBe('i1');
+  });
+
   it('detects transfers and classifies partner transfers', () => {
     const t = [
       txn('a', '2026-09-03', -1000, 'acc-me', { description: 'TRANSFER TO SAVINGS' }),

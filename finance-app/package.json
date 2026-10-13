@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Local-first household finance and wealth planning app for two partners (Australia).",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.12"
   },
   "scripts": {
     "dev": "concurrently -k -n web,api -c cyan,magenta \"vite\" \"tsx watch server/index.ts\"",

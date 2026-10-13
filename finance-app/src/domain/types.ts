@@ -339,6 +339,8 @@ export interface BankConnection {
   consentGrantedAt?: string;
   consentExpiresAt?: string;
   scopes: string[];
+  /** Visibility given to accounts this connection discovers for the first time. */
+  newAccountVisibility?: Visibility;
   lastSyncAt?: string;
   lastSyncResult?: { ok: boolean; message: string; at: string; added?: number; duplicates?: number };
   createdAt: string;

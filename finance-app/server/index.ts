@@ -22,6 +22,8 @@ import { ConnectionVault, loadKey } from './vault';
 import { FetchRefused, fetchListing } from './listing';
 
 const ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
+// Optional .env next to package.json; real environment variables take precedence.
+if (existsSync(join(ROOT, '.env'))) process.loadEnvFile(join(ROOT, '.env'));
 const PRODUCTION = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.API_PORT ?? process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '127.0.0.1';

@@ -12,6 +12,7 @@ export default defineConfig({
     port: 5173,
     proxy: { '/api': { target: `http://127.0.0.1:${apiPort}`, changeOrigin: false } },
   },
+  preview: { port: 4173, proxy: { '/api': { target: `http://127.0.0.1:${apiPort}`, changeOrigin: false } } },
   build: {
     sourcemap: false,
     chunkSizeWarningLimit: 900,

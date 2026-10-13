@@ -145,7 +145,8 @@ export interface ImportOutcome {
  * - Same provider external id → skipped (re-sync of the same transaction).
  * - Same account, date, amount and normalised description → skipped as exact duplicate,
  *   unless the incoming batch itself contains the same fingerprint several times (genuine
- *   repeated purchases) — those are kept up to the count present in the batch.
+ *   repeated purchases) — those are kept up to the count present in the batch, and the
+ *   repeats are flagged for review.
  * - Same account and amount within ±3 days → added but flagged as a possible duplicate.
  */
 export function mergeTransactions(existing: Transaction[], incoming: Transaction[]): ImportOutcome {
@@ -153,6 +154,7 @@ export function mergeTransactions(existing: Transaction[], incoming: Transaction
   const existingFp = new Map<string, number>();
   for (const t of existing) existingFp.set(fingerprint(t), (existingFp.get(fingerprint(t)) ?? 0) + 1);
   const seenInBatch = new Map<string, number>();
+  const batchFirst = new Map<string, Transaction>();
   const added: Transaction[] = [];
   const skipped: Transaction[] = [];
   const flagged: Transaction[] = [];
@@ -174,12 +176,15 @@ export function mergeTransactions(existing: Transaction[], incoming: Transaction
       skipped.push(t);
       continue;
     }
-    const near = (byAccountAmount.get(`${t.accountId}|${t.amountCents}`) ?? []).find(
-      (e) => !e.excluded && Math.abs(diffDays(e.date, t.date)) <= 3 && fingerprint(e) !== fp,
-    );
+    // A repeat of a fingerprint already added from this batch is kept (it may be a genuine
+    // second purchase) but flagged, so a feed that resends items doesn't double-count silently.
+    const near =
+      (n > 1 ? batchFirst.get(fp) : undefined) ??
+      (byAccountAmount.get(`${t.accountId}|${t.amountCents}`) ?? []).find((e) => !e.excluded && Math.abs(diffDays(e.date, t.date)) <= 3 && fingerprint(e) !== fp);
     const out = near ? { ...t, possibleDuplicateOf: near.id } : t;
     if (near) flagged.push(out);
     added.push(out);
+    if (!batchFirst.has(fp)) batchFirst.set(fp, out);
     if (t.externalId) byExternal.add(`${t.accountId}|${t.externalId}`);
   }
   return { added, skipped, flagged };
