@@ -115,7 +115,9 @@ export function insightsFor(data: WorkspaceData, perspective: Perspective): Insi
   const current = d.monthly[perspective][d.months.length - 1];
   const surplusMonths = complete.map((m) => d.monthly[perspective][d.months.indexOf(m)]).filter((s) => s.transactionCount > 0);
   const avgSurplus = surplusMonths.length ? Math.round(surplusMonths.reduce((a, s) => a + s.incomeCents - s.consumptionCents, 0) / surplusMonths.length) : null;
-  const essential = d.average[perspective].essential + (perspective === 'household' ? d.loanRepaymentsMonthlyCents : 0);
+  // Household: essential non-housing costs plus full loan repayments (which already include
+  // mortgage interest), so housing isn't counted twice.
+  const essential = perspective === 'household' ? d.livingCosts.essentialCents + d.loanRepaymentsMonthlyCents : d.average[perspective].essential;
   const insights = generateInsights({
     today: d.today,
     names: d.names,

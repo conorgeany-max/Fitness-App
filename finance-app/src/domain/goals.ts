@@ -1,6 +1,7 @@
 /**
  * Financial goals: progress, required contributions and competing allocations.
  */
+import { formatMoney } from './money';
 import { requiredMonthlyContribution, monthsToTarget } from './compound';
 import { addMonths, diffMonths, type ISODate } from './dates';
 import { categoryMeta } from './holdingCategories';
@@ -131,7 +132,7 @@ export function goalOptions(p: GoalProgress, today: ISODate, extraMonthlyCents: 
   };
   return [
     make('Current plan', g.monthlyContributionCents, g.expectedReturn),
-    make(`Save ${Math.round(extraMonthlyCents / 100)} more a month`, g.monthlyContributionCents + extraMonthlyCents, g.expectedReturn),
+    make(`Save ${formatMoney(extraMonthlyCents)} more a month`, g.monthlyContributionCents + extraMonthlyCents, g.expectedReturn),
     make(`Invest at ${(investedReturn * 100).toFixed(1)}% (not guaranteed)`, g.monthlyContributionCents, investedReturn),
     { label: 'Contribution needed for target date', monthsToGoal: p.monthsLeft, date: g.targetDate, monthlyCents: p.requiredMonthlyCents },
   ];
