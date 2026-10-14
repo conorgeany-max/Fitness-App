@@ -28,7 +28,7 @@ export interface ObInstitution {
   scenario?: 'healthy' | 'expired-consent' | 'failure' | 'duplicates';
 }
 
-export type ObAccountType = 'transaction' | 'savings' | 'offset' | 'term-deposit' | 'credit-card' | 'mortgage' | 'personal-loan' | 'other';
+export type ObAccountType = 'transaction' | 'savings' | 'offset' | 'term-deposit' | 'credit-card' | 'mortgage' | 'personal-loan' | 'investment' | 'other';
 
 export interface ObAccount {
   externalId: string;
@@ -80,7 +80,7 @@ export interface ObSyncPayload {
   warnings: string[];
 }
 
-const TYPE_TO_CATEGORY: Record<ObAccountType, HoldingCategory> = {
+export const TYPE_TO_CATEGORY: Record<ObAccountType, HoldingCategory> = {
   transaction: 'transaction',
   savings: 'savings',
   offset: 'offset',
@@ -88,9 +88,10 @@ const TYPE_TO_CATEGORY: Record<ObAccountType, HoldingCategory> = {
   'credit-card': 'credit-card',
   mortgage: 'mortgage-owner',
   'personal-loan': 'personal-loan',
+  investment: 'shares-au',
   other: 'other-asset',
 };
-const LIABILITY_TYPES: ObAccountType[] = ['credit-card', 'mortgage', 'personal-loan'];
+export const LIABILITY_TYPES: ObAccountType[] = ['credit-card', 'mortgage', 'personal-loan'];
 
 export function sourceFor(env: ObEnvironment): DataSource {
   return env === 'live' ? 'live' : env === 'sandbox' ? 'sandbox' : 'mock';

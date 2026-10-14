@@ -120,6 +120,11 @@ export interface Holding {
   /** For properties: expected rental income per month. */
   rentalIncomeMonthlyCents?: Cents;
   archived?: boolean;
+  /**
+   * Hosted mode only: a stand-in for the total of one partner's private items in a category,
+   * built from the totals they chose to share. Never saved, never listed individually.
+   */
+  summaryOf?: PersonId;
   createdAt: string;
   updatedAt: string;
 }
