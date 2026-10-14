@@ -59,7 +59,7 @@ Adding another provider means implementing `ProviderAdapter` in `server/provider
 - Each person pastes their own Personal Access Token in Settings → Connections. It is checked with Up's `/util/ping`, encrypted with AES-256-GCM and stored server-side. The browser never gets it back.
 - The server reads accounts and transactions, and registers a webhook so new transactions arrive within seconds. Webhook calls are verified with HMAC-SHA256. A daily cron re-syncs as a safety net.
 - **What the token allows.** Up's personal token is read-only for money: it cannot make payments or transfers. It can also change a transaction's category and tags. This app never calls those endpoints, but anyone holding the token could, which is why it is encrypted and never sent back to the browser. Revoke it in the Up app at any time.
-- **Disconnect** deletes the stored token and webhook. Synced history is kept unless the person deletes their account.
+- **Disconnect** deletes the stored token and webhook, plus the accounts only that person owns and their history. A joint account stays for the partner.
 - Up is not a CDR data recipient arrangement: it is the customer using their own bank's API. No accreditation is claimed.
 
 **SnapTrade** (`server/providers/snaptrade.ts`)
