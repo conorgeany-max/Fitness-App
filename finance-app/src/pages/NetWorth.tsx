@@ -14,6 +14,7 @@ import { Badge, Button, Card, CardBody, CardHeader, Disclosure, EmptyState, Page
 import { Money, OwnerChip, ScopeBadge, SourceBadge, StatusBadge, UpdatedAt } from '@/components/finance';
 import { ChartTooltip, Legend, SERIES, axisProps, gridProps, moneyTick } from '@/components/charts';
 import { HoldingForm, ValuationForm, newHolding } from '@/components/HoldingForm';
+import { StatementUpload } from '@/components/StatementUpload';
 
 type Metric = keyof NetWorthTotals;
 const METRICS: { key: Metric; label: string }[] = [
@@ -77,6 +78,7 @@ export default function NetWorth() {
             <Button icon={<Camera className="h-4 w-4" />} onClick={() => { recordSnapshot(); toast('Snapshot recorded for this month'); }}>
               Record snapshot
             </Button>
+            <StatementUpload />
             <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setEditing(newHolding('asset'))}>
               Add item
             </Button>

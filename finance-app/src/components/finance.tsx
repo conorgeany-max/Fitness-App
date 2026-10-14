@@ -19,7 +19,8 @@ const SOURCE_META: Record<DataSource, { label: string; tone: Tone; title: string
   csv: { label: 'CSV import', tone: 'neutral', title: 'Imported from a CSV file you supplied' },
   mock: { label: 'Mock bank', tone: 'warn', title: 'Development mock provider — not real money' },
   sandbox: { label: 'Sandbox', tone: 'warn', title: 'Provider sandbox test data — not real money' },
-  live: { label: 'Synced', tone: 'good', title: 'Synchronised from your bank via open banking (CDR)' },
+  live: { label: 'Synced', tone: 'good', title: 'Updated automatically from your bank or broker' },
+  statement: { label: 'Statement', tone: 'neutral', title: 'From a statement you uploaded and confirmed' },
   estimate: { label: 'Estimate', tone: 'info', title: 'Estimated by the app' },
   demo: { label: 'Demo', tone: 'demo', title: 'Fictional demo data' },
 };

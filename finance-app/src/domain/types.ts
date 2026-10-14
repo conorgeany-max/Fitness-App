@@ -20,6 +20,7 @@ export type DataSource =
   | 'mock' // the development mock open-banking provider (never real money)
   | 'sandbox' // a provider sandbox (test institution, never real money)
   | 'live' // a live open-banking (CDR) connection
+  | 'statement' // read from a statement the person uploaded and confirmed
   | 'estimate' // calculated or estimated by the app
   | 'demo'; // the demo workspace
 
