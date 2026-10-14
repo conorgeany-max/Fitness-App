@@ -20,6 +20,9 @@ import { mockProvider } from './providers/mock';
 import { ProviderError, type ProviderAdapter } from './providers/types';
 import { ConnectionVault, loadKey } from './vault';
 import { FetchRefused, fetchListing } from './listing';
+import { cloudEnvFromProcess } from './cloud/env';
+import { extraRoutesFromProcess } from './cloud/extras';
+import { handleCloudRequest } from './cloud/handler';
 
 const ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 // Optional .env next to package.json; real environment variables take precedence.
@@ -28,6 +31,10 @@ const PRODUCTION = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.API_PORT ?? process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '127.0.0.1';
 const DATA_DIR = resolve(process.env.DATA_DIR ?? join(ROOT, 'server', '.data'));
+
+// With Supabase configured, /api is the hosted API (same code as the Vercel function).
+// Without it, the server keeps its original single-computer mode below.
+const cloud = cloudEnvFromProcess(process.env, (repo) => extraRoutesFromProcess(repo));
 
 const key = loadKey(DATA_DIR, PRODUCTION);
 const vault = new ConnectionVault(join(DATA_DIR, 'connections.enc'), key);
@@ -180,10 +187,31 @@ function serveStatic(res: ServerResponse, url: URL) {
   createReadStream(file).pipe(res);
 }
 
+// ------------------------------------------------------------------ cloud bridge
+async function toWebRequest(req: IncomingMessage): Promise<Request> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const c of req) {
+    size += (c as Buffer).length;
+    if (size > 512 * 1024) throw new ProviderError('Request too large', 413, 'too_large');
+    chunks.push(c as Buffer);
+  }
+  const headers = new Headers();
+  for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers.set(k, v);
+  const method = req.method ?? 'GET';
+  return new Request(new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`), { method, headers, body: ['GET', 'HEAD'].includes(method) ? undefined : Buffer.concat(chunks) });
+}
+
+async function sendWeb(res: ServerResponse, r: Response) {
+  res.writeHead(r.status, Object.fromEntries(r.headers.entries()));
+  res.end(Buffer.from(await r.arrayBuffer()));
+}
+
 // ------------------------------------------------------------------ server
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
   try {
+    if (cloud && url.pathname.startsWith('/api/')) return await sendWeb(res, await handleCloudRequest(await toWebRequest(req), cloud.env));
     if (url.pathname.startsWith('/api/')) {
       if (!sameOrigin(req)) return send(res, 403, { error: 'forbidden_origin' });
       if (rateLimited(req)) return send(res, 429, { error: 'rate_limited' });
@@ -199,6 +227,6 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`[api] listening on http://${HOST}:${PORT} (${PRODUCTION ? 'production' : 'development'})`);
+  console.log(`[api] listening on http://${HOST}:${PORT} (${PRODUCTION ? 'production' : 'development'}, ${cloud ? 'hosted mode with Supabase' : 'single-computer mode'})`);
   for (const p of Object.values(providers)) console.log(`[api] provider ${p.info().id}: ${p.info().configured ? 'ready' : 'off'} — ${p.info().note}`);
 });
