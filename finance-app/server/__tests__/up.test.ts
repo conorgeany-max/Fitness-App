@@ -259,4 +259,16 @@ describe('cloud API: Up connection', () => {
     expect(s.repo.connections[0]).toMatchObject({ status: 'error' });
     expect(s.repo.connections[0].statusMessage).toMatch(/revoked/);
   });
+
+  it('deletes an account only after typed confirmation, removing its connection first', async () => {
+    await s.call('POST', '/api/up/connect', { auth: 'tok-alex', body: { token: ALEX_TOKEN } });
+    expect((await s.call('POST', '/api/account/delete', { auth: 'tok-alex', body: {} })).status).toBe(400);
+    const r = await s.call('POST', '/api/account/delete', { auth: 'tok-alex', body: { confirm: 'DELETE' } });
+    expect(r.status).toBe(200);
+    expect(s.up.webhooks.size).toBe(0);
+    expect(s.repo.connections).toEqual([]);
+    expect(s.repo.accounts).toEqual([]);
+    expect(s.repo.removed).toEqual(['u-alex']);
+    expect((await s.call('POST', '/api/up/sync', { auth: 'tok-alex' })).status).toBe(403);
+  });
 });

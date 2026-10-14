@@ -135,6 +135,27 @@ async function disconnectUp(env: CloudEnv, member: Member): Promise<Response> {
   return json(200, { ok: true, warning });
 }
 
+async function deleteAccount(req: Request, env: CloudEnv, member: Member): Promise<Response> {
+  const body = await readJson<{ confirm?: unknown }>(req);
+  if (body.confirm !== 'DELETE') throw new HttpError(400, 'confirm', 'Type DELETE to confirm.');
+  const warnings: string[] = [];
+  for (const provider of ['up', 'snaptrade'] as const) {
+    const conn = await env.repo.findConnection(member.householdId, member.person, provider);
+    if (!conn) continue;
+    if (provider === 'up' && conn.webhookId) {
+      try {
+        await new UpClient(decrypt(env.key, conn.secretCiphertext), env.fetchImpl).deleteWebhook(conn.webhookId);
+      } catch {
+        warnings.push('Revoke your Up token in the Up app to be sure Up stops sending updates.');
+      }
+    }
+    await env.repo.releaseAccounts(member.householdId, provider, member.person);
+    await env.repo.deleteConnection(conn.id);
+  }
+  await env.repo.removeMember(member);
+  return json(200, { ok: true, warnings });
+}
+
 async function upWebhook(req: Request, env: CloudEnv, connectionId: string): Promise<Response> {
   const raw = await readText(req, 256 * 1024);
   const conn = /^[0-9a-f-]{36}$/.test(connectionId) ? await env.repo.getConnection(connectionId) : null;
@@ -192,6 +213,7 @@ export async function cloudApi(req: Request, env: CloudEnv): Promise<Response | 
   if (path === '/api/up/connect' && method === 'POST') return connectUp(req, env, await member());
   if (path === '/api/up/sync' && method === 'POST') return syncMine(env, await member());
   if (path === '/api/up/disconnect' && method === 'POST') return disconnectUp(env, await member());
+  if (path === '/api/account/delete' && method === 'POST') return deleteAccount(req, env, await member());
   if (path === '/api/listing/fetch' && method === 'GET') return listingFetch(url, env, await member());
 
   for (const routes of env.extraRoutes ?? []) {

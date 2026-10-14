@@ -12,6 +12,7 @@ export default function Onboarding() {
   const data = useApp((s) => s.data);
   const mutate = useApp((s) => s.mutate);
   const switchWorkspace = useApp((s) => s.switchWorkspace);
+  const cloud = useApp((s) => s.mode === 'cloud');
   const nav = useNavigate();
   const [me, setMe] = useState(data.people.me.name === 'Me' ? '' : data.people.me.name);
   const [partner, setPartner] = useState(data.people.partner.name === 'Partner' ? '' : data.people.partner.name);
@@ -46,7 +47,7 @@ export default function Onboarding() {
     <div className="mx-auto max-w-3xl animate-fade-in">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Set up your household</h1>
-        <p className="mt-1 text-sm text-muted">A shared command centre for two partners. Everything stays on this device unless you export it.</p>
+        <p className="mt-1 text-sm text-muted">{cloud ? 'A shared command centre for the two of you. Each of you signs in with your own account.' : 'A shared command centre for two partners. Everything stays on this device unless you export it.'}</p>
       </div>
 
       {data.kind === 'demo' && (
@@ -69,19 +70,28 @@ export default function Onboarding() {
       </Card>
 
       <h2 className="mb-3 mt-8 text-sm font-semibold">2. How would you like to add your finances?</h2>
+      {cloud ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Choice icon={<Landmark className="h-5 w-5" />} title="Connect Up" body="Paste a read-only Up token. Balances and transactions then update by themselves, including 2Up and home loans." onClick={() => save('/settings?tab=connections')} primary />
+          <Choice icon={<PenLine className="h-5 w-5" />} title="Add property, super and other assets" body="For things no bank feed covers: your home, cars, super between statements, loans elsewhere." onClick={() => save('/net-worth?add=1')} />
+        </div>
+      ) : (
       <div className="grid gap-3 sm:grid-cols-2">
         <Choice icon={<PenLine className="h-5 w-5" />} title="Enter balances manually" body="Add accounts, property, super and debts with who owns them. The quickest way to see your net worth." onClick={() => save('/net-worth?add=1')} primary />
         <Choice icon={<FileSpreadsheet className="h-5 w-5" />} title="Import bank CSV files" body="Upload statements exported from internet banking. Parsed in your browser; duplicates are detected." onClick={() => save('/transactions?tab=import')} />
         <Choice icon={<Landmark className="h-5 w-5" />} title="Connect a bank (open banking)" body="Uses the Consumer Data Right via an accredited provider. In this build, sandbox and mock banks are available for testing — no real connections." onClick={() => save('/settings?tab=connections')} />
         <Choice icon={<FlaskConical className="h-5 w-5" />} title="Explore demo mode" body="A separate, clearly labelled workspace of fictional data. Your real workspace is untouched." onClick={startDemo} />
       </div>
+      )}
 
       <div className="mt-8 flex items-start gap-3 rounded-xl border border-line bg-surface-2/50 p-4 text-sm text-ink-2">
         <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-good" />
         <div>
           <p className="font-medium text-ink">Private by default</p>
           <p className="mt-1">
-            Data is stored in this browser (IndexedDB). You can add passphrase encryption, export everything, or delete it all from Settings. This app never asks for internet banking passwords, and calculations are educational estimates rather than financial, tax or credit advice.
+            {cloud
+              ? 'Anything marked private is readable only by its owner; the database enforces it. This app never asks for internet banking passwords, and calculations are educational estimates rather than financial, tax or credit advice.'
+              : 'Data is stored in this browser (IndexedDB). You can add passphrase encryption, export everything, or delete it all from Settings. This app never asks for internet banking passwords, and calculations are educational estimates rather than financial, tax or credit advice.'}
           </p>
         </div>
       </div>

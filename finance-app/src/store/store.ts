@@ -32,8 +32,11 @@ import type {
 import { uid } from '@/lib/id';
 import { emptyWorkspace, migrate } from './defaults';
 import * as db from './persistence';
+import { cloudConfigured } from '@/cloud/config';
+import type { CloudSession } from '@/cloud/session';
 
-export type AppStatus = 'loading' | 'locked' | 'ready' | 'error';
+export type AppStatus = 'loading' | 'auth' | 'locked' | 'ready' | 'error';
+export type AppMode = 'local' | 'cloud';
 
 interface UiState {
   perspective: Perspective;
@@ -44,12 +47,18 @@ interface UiState {
 
 export interface AppState {
   status: AppStatus;
+  /** 'cloud' when signed in to the hosted version; 'local' keeps everything on this device. */
+  mode: AppMode;
   error: string | null;
   meta: db.Meta;
   data: WorkspaceData;
   ui: UiState;
   // lifecycle
   init(): Promise<void>;
+  startCloud(session: CloudSession): Promise<void>;
+  /** Re-reads the household's data (after a partner's edit, a synced transaction or Refresh). */
+  pullCloud(): Promise<void>;
+  signOut(): Promise<void>;
   unlock(passphrase: string): Promise<void>;
   setPassphrase(passphrase: string | null): Promise<void>;
   switchWorkspace(kind: WorkspaceData['kind'], seed?: () => WorkspaceData): Promise<void>;
@@ -92,6 +101,13 @@ export interface AppState {
 
 let keyMaterial: db.KeyMaterial | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let cloud: CloudSession | null = null;
+let unsubscribe: (() => void) | null = null;
+let saving: Promise<void> | null = null;
+let pullAgain = false;
+
+/** The signed-in household session, when running the hosted version. */
+export const cloudSession = (): CloudSession | null => cloud;
 
 function audit(by: PersonId, action: string, detail: string): AuditEntry {
   return { id: uid('aud'), at: new Date().toISOString(), by, action, detail };
@@ -101,14 +117,28 @@ export const useApp = create<AppState>()((set, get) => {
   const scheduleSave = () => {
     if (saveTimer) clearTimeout(saveTimer);
     set((s) => ({ ui: { ...s.ui, saving: 'saving' } }));
-    saveTimer = setTimeout(async () => {
-      try {
-        await db.saveWorkspace(get().data, keyMaterial);
-        set((s) => ({ ui: { ...s.ui, saving: 'saved', lastSavedAt: new Date().toISOString(), saveError: null } }));
-      } catch (e) {
-        set((s) => ({ ui: { ...s.ui, saving: 'error', saveError: e instanceof Error ? e.message : 'Save failed' } }));
-      }
-    }, 400);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      saving = (async () => {
+        try {
+          if (cloud) {
+            const sent = get().data;
+            const merged = await cloud.save(sent);
+            // A partner's edits were merged in; show them unless this person kept typing.
+            if (merged && get().data === sent) set({ data: merged });
+          } else await db.saveWorkspace(get().data, keyMaterial);
+          set((s) => ({ ui: { ...s.ui, saving: 'saved', lastSavedAt: new Date().toISOString(), saveError: null } }));
+        } catch (e) {
+          set((s) => ({ ui: { ...s.ui, saving: 'error', saveError: e instanceof Error ? e.message : 'Save failed' } }));
+        } finally {
+          saving = null;
+          if (pullAgain) {
+            pullAgain = false;
+            void get().pullCloud();
+          }
+        }
+      })();
+    }, cloud ? 1200 : 400);
   };
 
   const mutate: AppState['mutate'] = (recipe, a) => {
@@ -133,12 +163,17 @@ export const useApp = create<AppState>()((set, get) => {
 
   return {
     status: 'loading',
+    mode: 'local',
     error: null,
     meta: { activeWorkspace: 'real', encrypted: false },
     data: emptyWorkspace('real'),
     ui: { perspective: 'household', saving: 'idle', lastSavedAt: null, saveError: null },
 
     async init() {
+      if (cloudConfigured()) {
+        set({ status: 'auth', mode: 'cloud' });
+        return;
+      }
       try {
         const meta = await db.loadMeta();
         set({ meta });
@@ -153,6 +188,47 @@ export const useApp = create<AppState>()((set, get) => {
       } catch (e) {
         set({ status: 'error', error: e instanceof Error ? e.message : 'Could not open local storage.' });
       }
+    },
+
+    async startCloud(session) {
+      unsubscribe?.();
+      cloud = session;
+      const data = await session.load();
+      set({ data, status: 'ready', mode: 'cloud' });
+      unsubscribe = session.subscribe(() => void get().pullCloud());
+      maybeAutoSnapshot();
+    },
+
+    async pullCloud() {
+      if (!cloud) return;
+      // Never pull while a save is pending or running: the save merges anything newer itself.
+      if (saveTimer || saving) {
+        pullAgain = true;
+        return;
+      }
+      const before = get().data;
+      try {
+        const next = await cloud.pull(before);
+        if (get().data === before) set({ data: next });
+        else pullAgain = true;
+      } catch (e) {
+        set((s) => ({ ui: { ...s.ui, saveError: e instanceof Error ? e.message : 'Could not refresh' } }));
+      }
+    },
+
+    async signOut() {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        if (cloud) await cloud.save(get().data).catch(() => undefined);
+      }
+      await saving;
+      unsubscribe?.();
+      unsubscribe = null;
+      const s = cloud?.sb;
+      cloud = null;
+      await s?.auth.signOut();
+      set({ data: emptyWorkspace('real'), status: 'auth' });
     },
 
     async unlock(passphrase) {

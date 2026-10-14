@@ -109,6 +109,11 @@ export class MemoryRepo implements Repo {
     for (const k of this.balances.keys()) if (gone.has(k.split('|')[0])) this.balances.delete(k);
     for (const id of gone) this.positions.delete(id);
   }
+  removed: string[] = [];
+  async removeMember(member: Member) {
+    this.members = this.members.filter((m) => m.userId !== member.userId);
+    this.removed.push(member.userId);
+  }
   async getAiUsage(householdId: string, month: string) {
     return this.aiUsage.get(`${householdId}|${month}`) ?? { costMicros: 0, questions: 0 };
   }

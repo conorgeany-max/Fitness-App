@@ -14,6 +14,7 @@ const Property = lazy(() => import('./pages/Property'));
 const Tools = lazy(() => import('./pages/Tools'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Onboarding = lazy(() => import('./pages/Onboarding'));
+const AuthGate = lazy(() => import('./cloud/AuthGate').then((m) => ({ default: m.AuthGate })));
 
 function useTheme() {
   const theme = useApp((s) => s.data.settings.theme);
@@ -95,6 +96,12 @@ export function App() {
       <div className="p-6">
         <PageFallback />
       </div>
+    );
+  if (status === 'auth')
+    return (
+      <Suspense fallback={<div className="p-6"><PageFallback /></div>}>
+        <AuthGate />
+      </Suspense>
     );
   if (status === 'locked') return <UnlockScreen />;
   if (status === 'error')

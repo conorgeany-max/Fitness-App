@@ -68,6 +68,11 @@ export interface Repo {
   replacePositions(accountId: string, positions: Position[]): Promise<void>;
   /** Removes the person from accounts their connection reported; deletes accounts nobody reports any more. */
   releaseAccounts(householdId: string, provider: CloudProvider, person: Person): Promise<void>;
+  /**
+   * Deletes a person's account: their private document and totals, their membership, the
+   * household once nobody is left, and their sign-in. Connections must be removed first.
+   */
+  removeMember(member: Member): Promise<void>;
   getAiUsage(householdId: string, month: string): Promise<{ costMicros: number; questions: number }>;
   addAiUsage(householdId: string, month: string, costMicros: number): Promise<void>;
 }

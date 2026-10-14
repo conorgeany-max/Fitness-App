@@ -8,8 +8,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-/** True when this build is the hosted version (both partners, synced online). */
-export const cloudConfigured = (): boolean => !!url && !!anonKey;
+export { cloudConfigured } from './config';
 
 let client: SupabaseClient | null = null;
 

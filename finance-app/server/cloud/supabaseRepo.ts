@@ -185,6 +185,18 @@ export class SupabaseRepo implements Repo {
     }
   }
 
+  async removeMember(member: Member) {
+    const hid = member.householdId;
+    check(await this.db.from('documents').delete().eq('household_id', hid).eq('scope', member.person));
+    check(await this.db.from('private_summaries').delete().eq('household_id', hid).eq('person', member.person));
+    check(await this.db.from('members').delete().eq('user_id', member.userId));
+    const left = check(await this.db.from('members').select('user_id').eq('household_id', hid)) as unknown[];
+    // The last person out takes the household (and everything shared) with them.
+    if (left.length === 0) check(await this.db.from('households').delete().eq('id', hid));
+    const { error } = await this.db.auth.admin.deleteUser(member.userId);
+    if (error) throw new Error(`Could not delete the sign-in: ${error.message}`);
+  }
+
   async getAiUsage(householdId: string, month: string) {
     const r = check(await this.db.from('ai_usage').select('cost_micros, questions').eq('household_id', householdId).eq('month', month).maybeSingle()) as { cost_micros: number; questions: number } | null;
     return { costMicros: Number(r?.cost_micros ?? 0), questions: r?.questions ?? 0 };

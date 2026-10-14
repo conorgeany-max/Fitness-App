@@ -9,6 +9,7 @@ import * as db from '@/store/persistence';
 import { useApp } from '@/store/store';
 import { Badge, Button, Callout, Card, CardHeader, Modal, NumberInput, Segmented, Select, TextInput, Toggle, cx, toast } from '@/components/ui';
 import { api } from './api';
+import { CloudDeleteAccount } from './Cloud';
 
 const STATES: AustralianState[] = ['VIC', 'NSW', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'];
 const PEOPLE: PersonId[] = ['me', 'partner'];
@@ -121,6 +122,7 @@ export function DataTab() {
   const replaceWorkspace = useApp((s) => s.replaceWorkspace);
   const switchWorkspace = useApp((s) => s.switchWorkspace);
   const deleteAllData = useApp((s) => s.deleteAllData);
+  const cloud = useApp((s) => s.mode === 'cloud');
   const fileRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<{ ws: WorkspaceData; name: string } | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -180,6 +182,7 @@ export function DataTab() {
         </div>
       </Card>
 
+      {!cloud && (
       <Card className="p-5">
         <h2 className="text-sm font-semibold">Demo workspace</h2>
         <p className="mb-3 mt-1 text-sm text-muted">Fictional data kept apart from your real workspace. Nothing you do in one affects the other.</p>
@@ -196,7 +199,11 @@ export function DataTab() {
           )}
         </div>
       </Card>
+      )}
 
+      {cloud ? (
+        <CloudDeleteAccount />
+      ) : (
       <Card className="border-bad/40 p-5">
         <h2 className="text-sm font-semibold text-bad">Delete everything</h2>
         <p className="mb-3 mt-1 text-sm text-muted">Removes both workspaces and the encryption settings from this browser and withdraws consent for every bank connection. This cannot be undone; export a backup first if you might need it.</p>
@@ -204,6 +211,7 @@ export function DataTab() {
           <Trash2 className="h-4 w-4" /> Delete all data
         </Button>
       </Card>
+      )}
 
       {pending && (
         <Modal
