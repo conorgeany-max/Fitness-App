@@ -13,6 +13,7 @@ const Forecasts = lazy(() => import('./pages/Forecasts'));
 const Property = lazy(() => import('./pages/Property'));
 const Tools = lazy(() => import('./pages/Tools'));
 const Settings = lazy(() => import('./pages/Settings'));
+const Ask = lazy(() => import('./pages/Ask'));
 const Onboarding = lazy(() => import('./pages/Onboarding'));
 const AuthGate = lazy(() => import('./cloud/AuthGate').then((m) => ({ default: m.AuthGate })));
 
@@ -127,6 +128,7 @@ export function App() {
               <Route path="/property" element={<Property />} />
               <Route path="/tools" element={<Tools />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/ask" element={<Ask />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>

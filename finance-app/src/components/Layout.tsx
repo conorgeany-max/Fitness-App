@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Building2, Calculator, Cloud, CloudOff, Home, LineChart, Menu, Moon, PiggyBank, Receipt, Settings as SettingsIcon, Sun, Wallet, X } from 'lucide-react';
+import { Building2, Calculator, Cloud, CloudOff, Home, LineChart, Menu, Moon, PiggyBank, Receipt, Settings as SettingsIcon, Sun, Wallet, X, Sparkles } from 'lucide-react';
 import { useApp } from '@/store/store';
 import { useDerived } from '@/store/derived';
 import type { Perspective } from '@/domain/types';
@@ -13,6 +13,7 @@ export const NAV = [
   { to: '/forecasts', label: 'Forecasts', icon: LineChart },
   { to: '/property', label: 'Property & Mortgages', short: 'Property', icon: Building2 },
   { to: '/tools', label: 'Financial Tools', short: 'Tools', icon: Calculator },
+  { to: '/ask', label: 'Ask the assistant', short: 'Ask', icon: Sparkles },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
