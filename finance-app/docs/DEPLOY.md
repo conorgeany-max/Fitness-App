@@ -3,7 +3,7 @@
 The hosted version runs on two free services:
 
 - **Supabase** holds the database and handles sign-in, including two-factor codes.
-- **Vercel** serves the website and the small server that talks to Up, SnapTrade, Domain and Anthropic.
+- **Netlify** serves the website and the small server that talks to Up, SnapTrade, Domain and Anthropic.
 
 Each of you gets your own login. The database itself refuses to show anything to a session that hasn't passed a two-factor check, and it keeps each person's private items away from the other.
 
@@ -16,39 +16,39 @@ Budget about an hour for the first setup. You need a computer with Node 20+ and 
 3. **Turn on two-factor codes.** Authentication → Sign In / Providers → Multi-Factor: make sure **TOTP (app authenticator)** is enabled. Leave phone MFA off.
 4. **Email sign-in.** Authentication → Sign In / Providers → Email: keep it enabled and keep **Confirm email** on.
 5. **Passwords.** Authentication → Policies (or Attack Protection): set the minimum length to 12 and turn on leaked-password protection if your plan offers it.
-6. **Addresses.** Authentication → URL Configuration: set **Site URL** to your Vercel address (step 2 gives you this; you can come back). Add the same address to **Redirect URLs**. Password-reset links only go to addresses listed here.
+6. **Addresses.** Authentication → URL Configuration: set **Site URL** to your Netlify address (step 2 gives you this; you can come back). Add the same address to **Redirect URLs**. Password-reset links only go to addresses listed here.
 7. **Keys.** Project Settings → API (or API Keys). You need three values:
    - the **Project URL**;
    - the **anon / publishable** key (safe in the browser);
-   - the **service_role / secret** key (server only; anyone holding it can read everything, so it only ever goes into Vercel's environment settings).
+   - the **service_role / secret** key (server only; anyone holding it can read everything, so it only ever goes into Netlify's environment variables).
 
 The schema adds the shared tables to Supabase Realtime, so when one of you changes something the other's screen updates within a second or two.
 
-## 2. Vercel
+## 2. Netlify
 
-1. Create a free **Hobby** account at [vercel.com](https://vercel.com) with your GitHub login.
-2. **Add New → Project**, import this repository, and set **Root Directory** to `finance-app`. Vercel reads `vercel.json` for the build, the routes, the security headers and the daily sync.
-3. Before the first deploy, open **Environment Variables** and add these (Production and Preview):
+1. Create a free account at [netlify.com](https://netlify.com) with your GitHub login.
+2. **Add new site → Import an existing project**, pick this repository and branch, and set **Base directory** to `finance-app`. Netlify reads `netlify.toml` for the build, the security headers and the page routing, and finds the API and the daily sync in `netlify/functions/`.
+3. Before the first deploy, open **Site configuration → Environment variables** and add these:
 
 | Name | Value |
 |---|---|
 | `VITE_SUPABASE_URL` | Supabase Project URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon / publishable key |
 | `SUPABASE_URL` | Supabase Project URL again |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service_role / secret key. Mark it **Sensitive**. |
-| `SERVER_ENCRYPTION_KEY` | Run `openssl rand -base64 32` and paste the output. Mark it **Sensitive**. |
-| `CRON_SECRET` | Run `openssl rand -hex 32` and paste the output. Mark it **Sensitive**. |
-| `PUBLIC_URL` | Your site's address, such as `https://our-money.vercel.app`. Optional on Vercel, which provides it, but set it if you add your own domain. |
-| `ANTHROPIC_API_KEY` | Optional, for the assistant (section 5). Mark it **Sensitive**. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service_role / secret key. Mark it **secret**. |
+| `SERVER_ENCRYPTION_KEY` | Run `openssl rand -base64 32` and paste the output. Mark it **secret**. |
+| `CRON_SECRET` | Run `openssl rand -hex 32` and paste the output. Mark it **secret**. |
+| `PUBLIC_URL` | Optional. Netlify provides the site's address; set this only if you add your own domain. |
+| `ANTHROPIC_API_KEY` | Optional, for the assistant (section 5). Mark it **secret**. |
 | `AI_MONTHLY_CAP_AUD` | `10` |
 | `DOMAIN_CLIENT_ID`, `DOMAIN_CLIENT_SECRET` | Optional, for the screener's Domain search (section 6). |
 
-4. **Deploy.** When it finishes, open the address Vercel gives you and go back to Supabase step 6 to set the Site URL.
-5. Check `https://<your address>/api/health` says `{"ok":true,...}`.
+4. **Deploy.** When it finishes, open the address Netlify gives you and go back to Supabase step 6 to set the Site URL.
+5. Check `https://<your address>/api/health` says `{"ok":true,"mode":"cloud"}`.
 
 **Keep `SERVER_ENCRYPTION_KEY` safe.** It encrypts your Up tokens and SnapTrade keys in the database. If you change or lose it, the stored tokens can't be read, and each of you will need to reconnect.
 
-The daily sync runs once a day (about 4 to 5 am Sydney time). Vercel's free plan allows one daily job and picks the exact minute itself. Up also pushes new transactions as they happen through a webhook, so the daily run is a safety net.
+The daily sync runs once a day at 18:00 UTC (about 4 to 5 am Sydney time), as a Netlify scheduled function. Up also pushes new transactions as they happen through a webhook, so the daily run is a safety net.
 
 ## 3. Your logins
 
@@ -84,7 +84,7 @@ SnapTrade connections are read-only here: the app reads accounts and holdings an
 
 1. Create an account at [console.anthropic.com](https://console.anthropic.com), add a payment method and buy a small amount of credit (US$5 is plenty to start).
 2. Under **Limits**, set a monthly spend limit of US$7 as a second safety net.
-3. Create an API key and add it to Vercel as `ANTHROPIC_API_KEY`, then redeploy.
+3. Create an API key and add it to Netlify as `ANTHROPIC_API_KEY`, then redeploy.
 4. Each of you turns the assistant on for yourself on the **Ask** page.
 
 Anthropic doesn't train its models on API traffic. The assistant sees only the totals listed on the Ask page, never accounts, transactions or tokens, and it can't change anything. The app stops answering for the month once the household's A$10 limit would be reached, counting each question at the most expensive possible price.
@@ -92,19 +92,19 @@ Anthropic doesn't train its models on API traffic. The assistant sees only the t
 ## 6. Domain search (optional)
 
 1. Sign in at [developer.domain.com.au](https://developer.domain.com.au), create a project and request access to the **Listings Management / Agents & Listings** API on the free tier. Domain reviews requests by hand.
-2. Once approved, create **client credentials** with the `api_listings_read` scope, and add them to Vercel as `DOMAIN_CLIENT_ID` and `DOMAIN_CLIENT_SECRET`.
+2. Once approved, create **client credentials** with the `api_listings_read` scope, and add them to Netlify as `DOMAIN_CLIENT_ID` and `DOMAIN_CLIENT_SECRET`.
 
 Until then, pasting listings into the screener works the same way.
 
 ## 7. Updates
 
-Every push to the branch Vercel watches redeploys the site. If a later version adds a file in `supabase/migrations/`, run it in the SQL Editor before (or right after) the deploy.
+Every push to the branch Netlify watches redeploys the site. If a later version adds a file in `supabase/migrations/`, run it in the SQL Editor before (or right after) the deploy.
 
 ## What it costs
 
 | Item | Monthly | Notes |
 |---|---|---|
-| Vercel Hobby | free | For personal, non-commercial use. |
+| Netlify Free | free | Within the free plan's monthly allowance for two people. |
 | Supabase Free | free | 500 MB database. Free projects pause after a week with no activity; the daily sync keeps it active. No automatic backups. |
 | Up API | free | |
 | SnapTrade Personal | free | |

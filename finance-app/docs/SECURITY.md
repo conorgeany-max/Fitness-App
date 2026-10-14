@@ -3,7 +3,7 @@
 ## Two ways to run it
 
 - **Local version** (`npm run dev` / `npm start`): one household on one computer. Described in the first sections below.
-- **Hosted version** (Supabase + Vercel, [DEPLOY.md](DEPLOY.md)): each partner signs in separately from any device. Described under **Hosted version**.
+- **Hosted version** (Supabase + Netlify, [DEPLOY.md](DEPLOY.md)): each partner signs in separately from any device. Described under **Hosted version**.
 
 ## Local version
 
@@ -35,9 +35,9 @@
 | Database access | Postgres row level security. Every policy requires a two-factor (`aal2`) session, so a stolen password alone reads nothing. |
 | Partner separation | Enforced by the database, not the app. Each person's private document, private accounts and transactions are readable only by them. The partner sees a person's private items only through `private_summaries`, which holds totals the owner chose to share. |
 | Provider tokens | Up tokens and SnapTrade keys are encrypted with AES-256-GCM (`SERVER_ENCRYPTION_KEY`) before storage. Token columns are never granted to browser sessions; only the server, with the service role key, can read them. |
-| Server secrets | `SUPABASE_SERVICE_ROLE_KEY`, `SERVER_ENCRYPTION_KEY`, `CRON_SECRET`, `ANTHROPIC_API_KEY` and Domain credentials live only in Vercel's environment. The browser bundle contains only the Supabase URL and anon key, which are public by design. |
+| Server secrets | `SUPABASE_SERVICE_ROLE_KEY`, `SERVER_ENCRYPTION_KEY`, `CRON_SECRET`, `ANTHROPIC_API_KEY` and Domain credentials live only in Netlify's environment variables. The browser bundle contains only the Supabase URL and anon key, which are public by design. |
 | Webhooks and cron | Up webhooks are checked with HMAC-SHA256 against a per-connection secret. The daily sync requires `CRON_SECRET`. |
-| Headers | `vercel.json` sets a strict CSP (scripts from the site only; connections only to Supabase), HSTS, `frame-ancestors 'none'`, nosniff and no-referrer. API responses are `no-store`. |
+| Headers | `netlify.toml` sets a strict CSP (scripts from the site only; connections only to Supabase), HSTS, `frame-ancestors 'none'`, nosniff and no-referrer. API responses are `no-store`. |
 | Money movement | None. Up's personal token can also change a transaction's category and tags, but it cannot move money; this app never calls those endpoints. SnapTrade is used read-only and never places trades. |
 | AI assistant | Off until each person turns it on. It receives only computed totals the person can already see, has no tools, and every number in its answer is inserted by the server from those totals. A household monthly ceiling (default A$10) is enforced by reserving each question's worst-case cost in the database before the call, atomically, so simultaneous questions cannot pass it. |
 | Account deletion | Settings → Data → Delete my account disconnects the person's providers, deletes their private data, their membership and their login. |

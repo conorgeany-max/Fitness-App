@@ -9,7 +9,8 @@ import type { Repo } from './types';
 
 export function publicUrlFrom(env: NodeJS.ProcessEnv): string {
   if (env.PUBLIC_URL) return env.PUBLIC_URL.replace(/\/$/, '');
-  if (env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  // Netlify sets URL to the site's main address.
+  if (env.NETLIFY === 'true' && env.URL) return env.URL.replace(/\/$/, '');
   return `http://localhost:${env.WEB_PORT ?? 5173}`;
 }
 
@@ -55,4 +56,12 @@ export function cloudEnvFromProcess(env: NodeJS.ProcessEnv = process.env, extraR
     extraRoutes: extraRoutes(repo),
   };
   return { env: cloud, repo };
+}
+
+let cached: CloudSetup | null | undefined;
+
+/** The hosted API's setup, built once per server instance. */
+export function cloudSetupOnce(extraRoutes: (repo: Repo) => ExtraRoutes[]): CloudSetup | null {
+  if (cached === undefined) cached = cloudEnvFromProcess(process.env, extraRoutes);
+  return cached;
 }

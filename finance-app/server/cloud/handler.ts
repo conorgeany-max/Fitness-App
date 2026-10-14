@@ -1,11 +1,11 @@
 /**
- * One entry point for the hosted API, shared by the Vercel function (api/index.ts) and the
+ * One entry point for the hosted API, shared by the Netlify function (netlify/functions/api.mts) and the
  * local server. Takes a Web Request, returns a Web Response.
  */
 import { json } from './http';
 import { cloudApi, errorResponse, type CloudEnv } from './routes';
 
-/** Vercel rewrites /api/<path> to /api?__path=<path>; restore the original path. */
+/** If a host rewrites /api/<path> to /api?__path=<path>, restore the original path. */
 export function originalUrl(req: Request): URL {
   const url = new URL(req.url);
   const rewritten = url.searchParams.get('__path');

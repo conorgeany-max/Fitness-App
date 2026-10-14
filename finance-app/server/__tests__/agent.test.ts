@@ -88,7 +88,7 @@ describe('AI assistant', () => {
 
   it('lets only one of two simultaneous questions through when there is room for one', async () => {
     const s = setup(JSON.stringify({ answer: 'ok', missing: [] }), true, 10);
-    s.repo.aiUsage.set('h|2026-10', { costMicros: 9_700_000, questions: 50 });
+    s.repo.aiUsage.set('h|2026-10', { costMicros: 9_800_000, questions: 50 });
     const [a, b] = await Promise.all([s.ask({ question: 'One', facts: FACTS }), s.ask({ question: 'Two', facts: FACTS })]);
     expect([a.status, b.status].sort()).toEqual([200, 429]);
     expect(s.sent).toHaveLength(1);

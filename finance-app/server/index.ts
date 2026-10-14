@@ -32,7 +32,7 @@ const PORT = Number(process.env.API_PORT ?? process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '127.0.0.1';
 const DATA_DIR = resolve(process.env.DATA_DIR ?? join(ROOT, 'server', '.data'));
 
-// With Supabase configured, /api is the hosted API (same code as the Vercel function).
+// With Supabase configured, /api is the hosted API (same code as the Netlify function).
 // Without it, the server keeps its original single-computer mode below.
 const cloud = cloudEnvFromProcess(process.env, (repo) => extraRoutesFromProcess(repo));
 

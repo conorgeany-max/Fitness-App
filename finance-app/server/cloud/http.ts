@@ -1,4 +1,4 @@
-/** Small helpers for Web-standard Request/Response handlers (Vercel functions and the local server). */
+/** Small helpers for Web-standard Request/Response handlers (Netlify functions and the local server). */
 import { HttpError } from './types';
 
 export const MAX_BODY = 64 * 1024;
