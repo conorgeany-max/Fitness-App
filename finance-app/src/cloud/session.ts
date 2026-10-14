@@ -232,8 +232,7 @@ export class CloudSession {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'documents', filter }, fire)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'private_summaries', filter }, fire)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'provider_accounts', filter }, fire)
-      // Transactions have no household column; row level security limits what arrives.
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'provider_transactions' }, fire)
+      // New transactions arrive as an update to their account (the server touches it).
       .subscribe();
     return () => {
       if (timer) clearTimeout(timer);

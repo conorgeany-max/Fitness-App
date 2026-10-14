@@ -46,6 +46,13 @@ describe('AI assistant', () => {
     expect(r.used).toEqual(['Household net worth', 'Share of income not spent']);
   });
 
+  it('removes bare numbers and spelled-out amounts, but keeps placeholders with digits in their ids', () => {
+    const facts: AgentFact[] = [{ id: 'goal_1_target', label: 'Goal target', kind: 'money', value: 5_000_000 }];
+    const r = renderAnswer('Target {{goal_1_target}}; you have 48,000 dollars, or 1.2k, or 90000 in 3 accounts.', facts);
+    expect(r.answer).toBe('Target $50,000; you have [figure removed], or [figure removed], or [figure removed] in [figure removed] accounts.');
+    expect(r.removed).toBe(4);
+  });
+
   it('rejects malformed figures', () => {
     expect(() => validateFacts([{ id: 'Bad Id', label: 'x', kind: 'money', value: 1 }])).toThrow();
     expect(() => validateFacts([{ id: 'a', label: 'x', kind: 'money', value: 'lots' }])).toThrow();
@@ -77,6 +84,15 @@ describe('AI assistant', () => {
     expect(r.status).toBe(429);
     expect(String(r.body.message)).toMatch(/A\$10\.00 limit/);
     expect(s.sent).toHaveLength(0);
+  });
+
+  it('lets only one of two simultaneous questions through when there is room for one', async () => {
+    const s = setup(JSON.stringify({ answer: 'ok', missing: [] }), true, 10);
+    s.repo.aiUsage.set('h|2026-10', { costMicros: 9_700_000, questions: 50 });
+    const [a, b] = await Promise.all([s.ask({ question: 'One', facts: FACTS }), s.ask({ question: 'Two', facts: FACTS })]);
+    expect([a.status, b.status].sort()).toEqual([200, 429]);
+    expect(s.sent).toHaveLength(1);
+    expect(s.repo.aiUsage.get('h|2026-10')!.costMicros).toBeLessThanOrEqual(10_000_000);
   });
 
   it('reports a refusal plainly', async () => {

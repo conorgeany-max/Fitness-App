@@ -74,7 +74,10 @@ export interface Repo {
    */
   removeMember(member: Member): Promise<void>;
   getAiUsage(householdId: string, month: string): Promise<{ costMicros: number; questions: number }>;
-  addAiUsage(householdId: string, month: string, costMicros: number): Promise<void>;
+  /** Atomically adds `costMicros` and one question if that keeps the month at or under `capMicros`. */
+  reserveAiUsage(householdId: string, month: string, costMicros: number, capMicros: number): Promise<boolean>;
+  /** Adjusts a reservation once the real cost is known (negative to refund). */
+  settleAiUsage(householdId: string, month: string, deltaMicros: number, deltaQuestions: number): Promise<void>;
 }
 
 export class HttpError extends Error {

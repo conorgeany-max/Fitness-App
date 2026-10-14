@@ -15,7 +15,7 @@
 | Connection ids | Provider user and connection ids sit in an AES-256-GCM vault keyed by `SERVER_ENCRYPTION_KEY`, which is required in production. |
 | Bank credentials | Never requested or handled. Consent happens on the provider's site. |
 | Money movement | None. All provider access is read-only. |
-| Listing fetcher | http and https only, on standard ports. Rejects private, loopback and metadata addresses, and re-checks each redirect. Honours robots.txt. 2 MB cap, timeouts, no cookies and no JavaScript. |
+| Listing fetcher | http and https only, on standard ports. Rejects private, loopback and metadata addresses (IPv4 and IPv6, including NAT64 and 6to4) at connection time, so DNS rebinding cannot get past it, and re-checks each redirect, including for robots.txt. Honours robots.txt. 2 MB cap, timeouts, no cookies and no JavaScript. |
 | Audit | Imports, syncs, balance changes, connection changes and restores are logged in the workspace. |
 
 ## Partner privacy
@@ -39,7 +39,7 @@
 | Webhooks and cron | Up webhooks are checked with HMAC-SHA256 against a per-connection secret. The daily sync requires `CRON_SECRET`. |
 | Headers | `vercel.json` sets a strict CSP (scripts from the site only; connections only to Supabase), HSTS, `frame-ancestors 'none'`, nosniff and no-referrer. API responses are `no-store`. |
 | Money movement | None. Up's personal token can also change a transaction's category and tags, but it cannot move money; this app never calls those endpoints. SnapTrade is used read-only and never places trades. |
-| AI assistant | Off until each person turns it on. It receives only computed totals the person can already see, has no tools, and every number in its answer is inserted by the server from those totals. A household monthly ceiling (default A$10) is checked before each call. |
+| AI assistant | Off until each person turns it on. It receives only computed totals the person can already see, has no tools, and every number in its answer is inserted by the server from those totals. A household monthly ceiling (default A$10) is enforced by reserving each question's worst-case cost in the database before the call, atomically, so simultaneous questions cannot pass it. |
 | Account deletion | Settings → Data → Delete my account disconnects the person's providers, deletes their private data, their membership and their login. |
 
 ## No home-made authentication

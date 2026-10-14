@@ -212,4 +212,19 @@ select public.t_as('a');
 select public.t_assert((select count(*) from public.private_summaries) = 1, 'B could not delete A''s summary');
 rollback;
 
+-- 7. AI ceiling: reservations never pass the cap, and only the server can make them.
+begin;
+select public.t_assert(public.ai_reserve((select household_id from public.members limit 1), '2026-10', 6000000, 10000000), 'first reservation fits');
+select public.t_assert(not public.ai_reserve((select household_id from public.members limit 1), '2026-10', 6000000, 10000000), 'second reservation would pass the cap');
+select public.ai_settle((select household_id from public.members limit 1), '2026-10', -5000000, 0);
+select public.t_assert((select cost_micros from public.ai_usage where month = '2026-10') = 1000000, 'settle refunds the unused part');
+set local role authenticated;
+select public.t_as('a');
+do $$ begin
+  perform public.ai_reserve(public.my_household(), '2026-10', -100000000, 10000000);
+  raise exception 'FAILED: a signed-in user could change AI usage';
+exception when insufficient_privilege then null;
+end $$;
+rollback;
+
 \echo 'RLS tests passed'

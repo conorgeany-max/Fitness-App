@@ -4,13 +4,17 @@
  * Guard rails:
  * - https/http only, standard ports, no credentials in the URL.
  * - The host must resolve only to public addresses (blocks localhost, private, link-local,
- *   carrier-grade NAT and metadata ranges), checked again on every redirect (SSRF).
+ *   carrier-grade NAT and metadata ranges). The check runs on the address each connection
+ *   actually uses, so DNS rebinding can't slip past it, and again on every redirect (SSRF).
  * - robots.txt is honoured for our user agent; if it disallows the path we don't fetch.
  * - 10 second timeout, 2 MB cap, HTML only. No cookies, no JavaScript execution.
  * Failures are reported as they are; the browser then asks the person to paste the text.
  */
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { lookup as lookupCb, type LookupAddress } from 'node:dns';
+import http from 'node:http';
+import https from 'node:https';
+import { isIP, type LookupFunction } from 'node:net';
 
 export const USER_AGENT = 'HouseholdFinanceListingReader/1.0 (+personal use; respects robots.txt)';
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -26,10 +30,17 @@ export function isPrivateAddress(ip: string): boolean {
     );
   }
   const v6 = ip.toLowerCase();
-  if (v6 === '::' || v6 === '::1') return true;
-  if (v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe8') || v6.startsWith('fe9') || v6.startsWith('fea') || v6.startsWith('feb') || v6.startsWith('ff')) return true;
-  const mapped = v6.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mapped) return isPrivateAddress(mapped[1]);
+  // IPv4-mapped or -compatible forms (::ffff:a.b.c.d, ::a.b.c.d) are judged by their IPv4 part.
+  const embedded = v6.match(/^::(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/);
+  if (embedded) return isPrivateAddress(embedded[1]);
+  if (isIP(v6) !== 6) return true;
+  // Only global unicast (2000::/3) is public. Within it, 6to4 (2002::/16), Teredo (2001::/32) and
+  // documentation (2001:db8::/32) can wrap or stand in for private addresses, so they're refused too.
+  // Everything else, including NAT64 (64:ff9b::/96), loopback, link-local and unique local, is private.
+  const [h1, h2] = v6.split(':').map((h) => parseInt(h || '0', 16));
+  if (h1 < 0x2000 || h1 > 0x3fff) return true;
+  if (h1 === 0x2002) return true;
+  if (h1 === 0x2001 && (h2 === 0 || h2 === 0xdb8)) return true;
   return false;
 }
 
@@ -54,6 +65,53 @@ async function assertPublicHost(host: string) {
     throw new FetchRefused(`Could not find ${host}.`);
   });
   if (!addrs.length || addrs.some((a) => isPrivateAddress(a.address))) throw new FetchRefused('That address points to a private network and was not fetched.');
+}
+
+/** DNS lookup that refuses private addresses, used for the connection itself (no rebinding gap). */
+const guardedLookup: LookupFunction = (hostname, options, callback) => {
+  lookupCb(hostname, { ...options, all: true }, (err, addresses) => {
+    const list = addresses as unknown as LookupAddress[];
+    if (err) return callback(err, '', 0);
+    const bad = !list?.length || list.some((a) => isPrivateAddress(a.address));
+    if (bad) return callback(Object.assign(new Error('private address'), { code: 'EPRIVATE' }), '', 0);
+    if ((options as { all?: boolean }).all) return (callback as unknown as (e: null, a: LookupAddress[]) => void)(null, list);
+    callback(null, list[0].address, list[0].family);
+  });
+};
+
+interface GuardedResponse {
+  status: number;
+  headers: http.IncomingHttpHeaders;
+  body: () => Promise<string>;
+}
+
+/** GET without following redirects, connecting only to public addresses. */
+export function guardedGet(url: URL, accept: string, timeoutMs: number): Promise<GuardedResponse> {
+  const mod = url.protocol === 'https:' ? https : http;
+  return new Promise((resolve, reject) => {
+    const req = mod.get(url, { headers: { 'User-Agent': USER_AGENT, Accept: accept }, lookup: guardedLookup, timeout: timeoutMs, agent: false }, (res) => {
+      resolve({
+        status: res.statusCode ?? 0,
+        headers: res.headers,
+        body: () =>
+          new Promise<string>((ok, fail) => {
+            const chunks: Buffer[] = [];
+            let total = 0;
+            res.on('data', (c: Buffer) => {
+              total += c.length;
+              if (total > MAX_BYTES) {
+                res.destroy();
+                fail(new FetchRefused('The page is larger than 2 MB and was not read.'));
+              } else chunks.push(c);
+            });
+            res.on('end', () => ok(Buffer.concat(chunks).toString('utf-8')));
+            res.on('error', fail);
+          }),
+      });
+    });
+    req.on('timeout', () => req.destroy(new FetchRefused(`${url.hostname} took too long to respond.`)));
+    req.on('error', (e: NodeJS.ErrnoException) => reject(e.code === 'EPRIVATE' ? new FetchRefused('That address points to a private network and was not fetched.') : e instanceof FetchRefused ? e : new FetchRefused(`Could not reach ${url.hostname}.`)));
+  });
 }
 
 /** Minimal robots.txt check for our user agent and "*". */
@@ -91,24 +149,6 @@ export function robotsAllows(robots: string, path: string, agent = 'householdfin
   return best ? best.allow : true;
 }
 
-async function readCapped(res: Response): Promise<string> {
-  const reader = res.body?.getReader();
-  if (!reader) return '';
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.length;
-    if (total > MAX_BYTES) {
-      await reader.cancel();
-      throw new FetchRefused('The page is larger than 2 MB and was not read.');
-    }
-    chunks.push(value);
-  }
-  return new TextDecoder('utf-8').decode(Buffer.concat(chunks));
-}
-
 /** Turn HTML into readable text, keeping line breaks between blocks. */
 export function htmlToText(html: string): string {
   return html
@@ -133,26 +173,27 @@ export async function fetchListing(raw: string): Promise<{ text: string; finalUr
   let url = validateUrl(raw);
   await assertPublicHost(url.hostname);
 
-  const robotsRes = await fetch(`${url.origin}/robots.txt`, { headers: { 'User-Agent': USER_AGENT }, redirect: 'follow', signal: AbortSignal.timeout(8_000) }).catch(() => null);
-  if (robotsRes?.ok) {
-    const robots = (await robotsRes.text()).slice(0, 500_000);
+  // robots.txt: redirects aren't followed, and the same address checks apply.
+  const robotsRes = await guardedGet(new URL('/robots.txt', url.origin), 'text/plain', 8_000).catch(() => null);
+  if (robotsRes && robotsRes.status >= 200 && robotsRes.status < 300) {
+    const robots = (await robotsRes.body().catch(() => '')).slice(0, 500_000);
     if (!robotsAllows(robots, url.pathname + url.search)) throw new FetchRefused(`${url.hostname} asks automated tools not to read this page (robots.txt), so it wasn't fetched. Copy the listing text from your browser and paste it instead.`);
   }
 
   for (let hop = 0; hop < 5; hop++) {
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,application/xhtml+xml' }, redirect: 'manual', signal: AbortSignal.timeout(10_000) });
+    const res = await guardedGet(url, 'text/html,application/xhtml+xml', 10_000);
     if (res.status >= 300 && res.status < 400) {
-      const loc = res.headers.get('location');
+      const loc = res.headers.location;
       if (!loc) throw new FetchRefused('The site redirected without a destination.');
       url = validateUrl(new URL(loc, url).toString());
       await assertPublicHost(url.hostname);
       continue;
     }
     if (res.status === 401 || res.status === 403 || res.status === 429) throw new FetchRefused(`${url.hostname} blocked automated access (HTTP ${res.status}). This is common for listing sites. Copy the listing text from your browser and paste it instead.`);
-    if (!res.ok) throw new FetchRefused(`${url.hostname} returned HTTP ${res.status}.`);
-    const type = res.headers.get('content-type') ?? '';
+    if (res.status < 200 || res.status >= 300) throw new FetchRefused(`${url.hostname} returned HTTP ${res.status}.`);
+    const type = res.headers['content-type'] ?? '';
     if (!/text\/html|application\/xhtml/.test(type)) throw new FetchRefused('The link is not a web page.');
-    const text = htmlToText(await readCapped(res));
+    const text = htmlToText(await res.body());
     if (text.length < 200) throw new FetchRefused('The page loaded but had almost no readable text (it probably needs JavaScript). Paste the listing text instead.');
     return { text: text.slice(0, 100_000), finalUrl: url.toString() };
   }

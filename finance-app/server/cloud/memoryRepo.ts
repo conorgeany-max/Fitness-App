@@ -117,9 +117,16 @@ export class MemoryRepo implements Repo {
   async getAiUsage(householdId: string, month: string) {
     return this.aiUsage.get(`${householdId}|${month}`) ?? { costMicros: 0, questions: 0 };
   }
-  async addAiUsage(householdId: string, month: string, costMicros: number) {
+  async reserveAiUsage(householdId: string, month: string, costMicros: number, capMicros: number) {
     const k = `${householdId}|${month}`;
     const u = this.aiUsage.get(k) ?? { costMicros: 0, questions: 0 };
+    if (u.costMicros + costMicros > capMicros) return false;
     this.aiUsage.set(k, { costMicros: u.costMicros + costMicros, questions: u.questions + 1 });
+    return true;
+  }
+  async settleAiUsage(householdId: string, month: string, deltaMicros: number, deltaQuestions: number) {
+    const k = `${householdId}|${month}`;
+    const u = this.aiUsage.get(k);
+    if (u) this.aiUsage.set(k, { costMicros: Math.max(0, u.costMicros + deltaMicros), questions: Math.max(0, u.questions + deltaQuestions) });
   }
 }

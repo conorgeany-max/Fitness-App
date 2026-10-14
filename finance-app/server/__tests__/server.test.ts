@@ -3,17 +3,30 @@ import { randomBytes } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FetchRefused, htmlToText, isPrivateAddress, robotsAllows, validateUrl } from '../listing';
+import { createServer } from 'node:http';
+import { FetchRefused, guardedGet, htmlToText, isPrivateAddress, robotsAllows, validateUrl } from '../listing';
 import { ConnectionVault, decrypt, encrypt } from '../vault';
 import { mockProvider } from '../providers/mock';
 
 describe('listing fetch guards', () => {
   it('flags private, loopback, link-local and metadata addresses', () => {
-    for (const ip of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', 'fd00::1', 'fe80::1', '::ffff:10.0.0.1']) {
+    for (const ip of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', 'fd00::1', 'fe80::1', '::ffff:10.0.0.1', '::10.0.0.1', '64:ff9b::a00:1', '2002:c0a8:101::1', '2001:0:4136:e378::1', '2001:db8::1', 'ff02::1', 'not-an-ip']) {
       expect(isPrivateAddress(ip), ip).toBe(true);
     }
-    for (const ip of ['1.1.1.1', '172.32.0.1', '104.16.0.200', '2606:4700::1111']) {
+    for (const ip of ['1.1.1.1', '172.32.0.1', '104.16.0.200', '2606:4700::1111', '::ffff:1.1.1.1', '2a00:1450:4001::200e']) {
       expect(isPrivateAddress(ip), ip).toBe(false);
+    }
+  });
+
+  it('checks the address each connection actually uses, so DNS rebinding cannot reach a private host', async () => {
+    const srv = createServer((_, res) => res.end('internal')).listen(0, '127.0.0.1');
+    await new Promise((r) => srv.once('listening', r));
+    const port = (srv.address() as { port: number }).port;
+    try {
+      // "localhost" resolves to a loopback address at connect time, which the guarded lookup refuses.
+      await expect(guardedGet(new URL(`http://localhost:${port}/`), 'text/html', 2000)).rejects.toThrow(/private network/);
+    } finally {
+      srv.close();
     }
   });
 

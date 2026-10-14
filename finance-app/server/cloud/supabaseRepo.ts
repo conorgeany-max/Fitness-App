@@ -158,11 +158,16 @@ export class SupabaseRepo implements Repo {
       }));
       check(await this.db.from('provider_transactions').upsert(rows, { onConflict: 'account_id,external_id' }));
     }
+    // Realtime doesn't apply row level security to deletes, so transactions aren't published.
+    // Touching the account (which is) tells both partners' screens to refresh.
+    if (txns.length) check(await this.db.from('provider_accounts').update({ updated_at: now }).eq('id', accountId));
   }
 
   async deleteTransaction(householdId: string, provider: CloudProvider, externalId: string) {
     const ids = (check(await this.db.from('provider_accounts').select('id').eq('household_id', householdId).eq('provider', provider)) as { id: string }[]).map((r) => r.id);
-    if (ids.length) check(await this.db.from('provider_transactions').delete().eq('external_id', externalId).in('account_id', ids));
+    if (!ids.length) return;
+    check(await this.db.from('provider_transactions').delete().eq('external_id', externalId).in('account_id', ids));
+    check(await this.db.from('provider_accounts').update({ updated_at: new Date().toISOString() }).in('id', ids));
   }
 
   async replacePositions(accountId: string, positions: Position[]) {
@@ -202,8 +207,11 @@ export class SupabaseRepo implements Repo {
     return { costMicros: Number(r?.cost_micros ?? 0), questions: r?.questions ?? 0 };
   }
 
-  async addAiUsage(householdId: string, month: string, costMicros: number) {
-    const cur = await this.getAiUsage(householdId, month);
-    check(await this.db.from('ai_usage').upsert({ household_id: householdId, month, cost_micros: cur.costMicros + costMicros, questions: cur.questions + 1 }, { onConflict: 'household_id,month' }));
+  async reserveAiUsage(householdId: string, month: string, costMicros: number, capMicros: number) {
+    return check(await this.db.rpc('ai_reserve', { p_household: householdId, p_month: month, p_micros: costMicros, p_cap: capMicros })) === true;
+  }
+
+  async settleAiUsage(householdId: string, month: string, deltaMicros: number, deltaQuestions: number) {
+    check(await this.db.rpc('ai_settle', { p_household: householdId, p_month: month, p_delta_micros: deltaMicros, p_delta_questions: deltaQuestions }));
   }
 }

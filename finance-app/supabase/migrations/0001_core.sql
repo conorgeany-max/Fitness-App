@@ -136,7 +136,7 @@ create table public.provider_positions (
 create table public.ai_usage (
   household_id uuid not null references public.households (id) on delete cascade,
   month text not null check (month ~ '^\d{4}-\d{2}$'),
-  -- US dollars in millionths, so the cap check never rounds.
+  -- Australian dollars in millionths, so the cap check never rounds.
   cost_micros bigint not null default 0,
   questions integer not null default 0,
   primary key (household_id, month)
@@ -311,11 +311,36 @@ revoke all on all functions in schema public from anon, authenticated, public;
 grant execute on function public.mfa_ok(), public.my_household(), public.my_person() to authenticated;
 grant execute on function public.create_household(text), public.create_invite(), public.join_household(text, text), public.save_document(text, jsonb, integer) to authenticated;
 
+-- ------------------------------------------------------------------ AI spending ceiling
+-- The server reserves a question's worst-case cost before calling the model, atomically, so
+-- simultaneous questions can never take the month past the ceiling. It settles the real cost after.
+create function public.ai_reserve(p_household uuid, p_month text, p_micros bigint, p_cap bigint) returns boolean
+language plpgsql volatile security invoker set search_path = '' as $$
+begin
+  insert into public.ai_usage (household_id, month) values (p_household, p_month) on conflict do nothing;
+  update public.ai_usage set cost_micros = cost_micros + p_micros, questions = questions + 1
+    where household_id = p_household and month = p_month and cost_micros + p_micros <= p_cap;
+  return found;
+end
+$$;
+
+create function public.ai_settle(p_household uuid, p_month text, p_delta_micros bigint, p_delta_questions integer) returns void
+language sql volatile security invoker set search_path = '' as $$
+  update public.ai_usage
+    set cost_micros = greatest(0, cost_micros + p_delta_micros), questions = greatest(0, questions + p_delta_questions)
+    where household_id = p_household and month = p_month;
+$$;
+
+revoke all on function public.ai_reserve(uuid, text, bigint, bigint), public.ai_settle(uuid, text, bigint, integer) from anon, authenticated, public;
+grant execute on function public.ai_reserve(uuid, text, bigint, bigint), public.ai_settle(uuid, text, bigint, integer) to service_role;
+
 -- ------------------------------------------------------------------ realtime
 do $$
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table public.documents, public.private_summaries, public.provider_accounts, public.provider_transactions;
+    -- provider_transactions is left out on purpose: Realtime sends DELETE events without
+    -- checking row level security. The server touches provider_accounts when transactions change.
+    alter publication supabase_realtime add table public.documents, public.private_summaries, public.provider_accounts;
   end if;
 end
 $$;

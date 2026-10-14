@@ -61,30 +61,46 @@ export function formatFact(f: AgentFact): string {
   return n.toLocaleString('en-AU');
 }
 
-const MONEY_OR_PERCENT = /(?:A?\$|AUD\s?)\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:k|m|bn|million|thousand)\b)?|\b\d[\d,]*(?:\.\d+)?\s?(?:%|per\s?cent|percent)/gi;
+// Any number the model writes itself (with or without $, %, "dollars" or "k") is removed. Only
+// {{id}} placeholders, filled from the app's figures, can put a number in an answer.
+const NUMBER = /(?:A?\$|AUD\s?)?\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:k|m|bn|million|thousand|dollars?|bucks|%|per\s?cent|percent)\b|%)?/gi;
+const PLACEHOLDER = /\{\{\s*([a-z0-9_]{1,40})\s*\}\}/g;
 
-/** Puts the app's figures into the answer and strips any amount the model wrote itself. */
+function scrubNumbers(text: string): { text: string; removed: number } {
+  let removed = 0;
+  const out = text.replace(NUMBER, (m) => {
+    removed++;
+    return `${/^\s/.test(m) ? ' ' : ''}[figure removed]`;
+  });
+  return { text: out, removed };
+}
+
+/** Puts the app's figures into the answer and strips any number the model wrote itself. */
 export function renderAnswer(text: string, facts: AgentFact[]): { answer: string; used: string[]; removed: number } {
   const byId = new Map(facts.map((f) => [f.id, f]));
   const used = new Set<string>();
   let removed = 0;
-  // First remove model-written amounts, then insert ours, so inserted figures are never scrubbed.
-  const scrubbed = text.replace(MONEY_OR_PERCENT, () => {
-    removed++;
-    return '[figure removed]';
-  });
-  const answer = scrubbed.replace(/\{\{\s*([a-z0-9_]{1,40})\s*\}\}/g, (_, id: string) => {
-    const f = byId.get(id);
-    if (!f) return '[unknown figure]';
-    used.add(f.label);
-    return formatFact(f);
-  });
+  // Scrub only the text between placeholders (ids contain digits), then insert our figures.
+  const parts = text.split(PLACEHOLDER);
+  const answer = parts
+    .map((part, i) => {
+      if (i % 2 === 0) {
+        const s = scrubNumbers(part);
+        removed += s.removed;
+        return s.text;
+      }
+      const f = byId.get(part);
+      if (!f) return '[unknown figure]';
+      used.add(f.label);
+      return formatFact(f);
+    })
+    .join('');
   return { answer, used: [...used], removed };
 }
 
 const SYSTEM = `You help a couple in Australia understand their own finances, using only the figures the app gives you.
 
-How to write figures: never type an amount, percentage, balance or date yourself. Refer to a figure only by writing its id in double braces, for example {{net_worth}}; the app replaces it with the exact value. You may compare figures in words ("more than", "about half"), but you cannot calculate new numbers, so don't state sums, differences or projections. If the question needs a figure you weren't given, say which one is missing and how they could add it in the app.
+How to write figures: never type a number of any kind yourself (amounts, percentages, counts, balances or dates); the app deletes any you write. Refer to a figure only by writing its id in double braces, for example {{net_worth}}; the app replaces it with the exact value. You may compare figures in words ("more than", "about half"), but you cannot calculate new numbers, so don't state sums, differences or projections. If the question needs a figure you weren't given, say which one is missing and how they could add it in the app.
 
 Scope: explain and compare what the figures show, point out what looks notable, and suggest general things they could look into. This is general information, not personal financial, tax or credit advice; don't recommend specific financial products, and suggest a licensed adviser for decisions that need one. You can't see individual accounts or transactions and can't move money or change anything.
 
@@ -124,11 +140,11 @@ export function agentRoutes(cfg: AgentConfig | null): ExtraRoutes {
 
     const factText = JSON.stringify(facts.map((f) => ({ id: f.id, label: f.label, value: formatFact(f) })));
     const thisMonth = month(cfg.now?.() ?? new Date());
-    const usage = await env.repo.getAiUsage(m.householdId, thisMonth);
     const capMicros = Math.round(cfg.capAud * 1_000_000);
-    // Worst case: every input character a token, plus the full output allowance.
+    // Worst case: every input character a token, plus the full output allowance. Reserved
+    // atomically before the call, so simultaneous questions can't pass the ceiling together.
     const worst = toAudMicros((SYSTEM.length + factText.length + question.length + 2000) * USD_PER_INPUT_TOKEN + MAX_OUTPUT_TOKENS * USD_PER_OUTPUT_TOKEN, cfg.audPerUsd);
-    if (usage.costMicros + worst > capMicros) {
+    if (!(await env.repo.reserveAiUsage(m.householdId, thisMonth, worst, capMicros))) {
       throw new HttpError(429, 'ai_cap', `This month's A$${cfg.capAud.toFixed(2)} limit for the assistant has been reached. It resets on the 1st.`);
     }
 
@@ -144,6 +160,9 @@ export function agentRoutes(cfg: AgentConfig | null): ExtraRoutes {
         messages: [{ role: 'user', content: `Figures (id, what it is, value):\n${factText}\n\nQuestion: ${question}` }],
       });
     } catch (e) {
+      // A failed request may still have been billed if it timed out mid-answer, so only clear
+      // refusals before the model ran are refunded; anything else keeps the reservation.
+      if (e instanceof Anthropic.APIError && e.status !== undefined && e.status < 500) await env.repo.settleAiUsage(m.householdId, thisMonth, -worst, -1);
       if (e instanceof Anthropic.RateLimitError) throw new HttpError(429, 'ai_busy', 'The assistant is busy. Try again in a minute.');
       if (e instanceof Anthropic.AuthenticationError) throw new HttpError(502, 'ai_key', "The assistant's API key was rejected. Check ANTHROPIC_API_KEY.");
       if (e instanceof Anthropic.APIError) throw new HttpError(502, 'ai_error', 'The assistant had a problem. Try again shortly.');
@@ -153,8 +172,8 @@ export function agentRoutes(cfg: AgentConfig | null): ExtraRoutes {
     const u = res.usage;
     const inTokens = u.input_tokens + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
     const cost = toAudMicros(inTokens * USD_PER_INPUT_TOKEN + u.output_tokens * USD_PER_OUTPUT_TOKEN, cfg.audPerUsd);
-    await env.repo.addAiUsage(m.householdId, thisMonth, cost);
-    const spentAud = (usage.costMicros + cost) / 1_000_000;
+    await env.repo.settleAiUsage(m.householdId, thisMonth, cost - worst, 0);
+    const spentAud = (await env.repo.getAiUsage(m.householdId, thisMonth)).costMicros / 1_000_000;
 
     if (res.stop_reason === 'refusal') return json(200, { ok: false, message: "The assistant couldn't help with that question. Try asking it differently.", spentAud, capAud: cfg.capAud });
     if (res.stop_reason === 'max_tokens') return json(200, { ok: false, message: 'The answer ran too long. Try a narrower question.', spentAud, capAud: cfg.capAud });
@@ -166,7 +185,7 @@ export function agentRoutes(cfg: AgentConfig | null): ExtraRoutes {
       return json(200, { ok: false, message: 'The assistant returned an unreadable answer. Try again.', spentAud, capAud: cfg.capAud });
     }
     const rendered = renderAnswer(typeof parsed.answer === 'string' ? parsed.answer : '', facts);
-    const missing = Array.isArray(parsed.missing) ? parsed.missing.filter((x): x is string => typeof x === 'string').slice(0, 5).map((s) => s.replace(MONEY_OR_PERCENT, '[figure removed]')) : [];
+    const missing = Array.isArray(parsed.missing) ? parsed.missing.filter((x): x is string => typeof x === 'string').slice(0, 5).map((s) => scrubNumbers(s.replace(PLACEHOLDER, '')).text) : [];
     return json(200, { ok: true, answer: rendered.answer, figuresUsed: rendered.used, removedNumbers: rendered.removed, missing, spentAud, capAud: cfg.capAud });
   };
 }
