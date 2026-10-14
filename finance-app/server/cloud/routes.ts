@@ -3,10 +3,11 @@
  * requires a Supabase session that passed two-factor sign-in (aal2) and belongs to a household.
  */
 import { FetchRefused, fetchListing } from '../listing';
+import { parseSnapTradeCredentials, SnapTradeClient } from '../providers/snaptrade';
 import { UpClient, verifyUpSignature, type UpWebhookEvent } from '../providers/up';
 import { decrypt, encrypt } from '../vault';
 import { bearer, json, RateLimiter, readJson, readText } from './http';
-import { applyUpEvent, syncUpConnection, type SyncDeps } from './sync';
+import { applyUpEvent, syncConnection, syncUpConnection, type SyncDeps } from './sync';
 import { HttpError, type Member, type Repo } from './types';
 
 export interface VerifiedToken {
@@ -59,7 +60,7 @@ export function webhookUrlFor(publicUrl: string, connectionId: string): string |
   }
 }
 
-const deps = (env: CloudEnv): SyncDeps => ({ repo: env.repo, key: env.key, fetchImpl: env.fetchImpl });
+export const deps = (env: CloudEnv): SyncDeps => ({ repo: env.repo, key: env.key, fetchImpl: env.fetchImpl });
 
 async function connectUp(req: Request, env: CloudEnv, member: Member): Promise<Response> {
   limit(env, `connect:${member.userId}`, 5, 'Too many attempts. Wait a minute and try again.');
@@ -111,14 +112,6 @@ async function connectUp(req: Request, env: CloudEnv, member: Member): Promise<R
   });
 }
 
-async function syncMine(env: CloudEnv, member: Member): Promise<Response> {
-  limit(env, `sync:${member.userId}`, 6, 'Too many refreshes. Wait a minute and try again.');
-  const conn = await env.repo.findConnection(member.householdId, member.person, 'up');
-  if (!conn) throw new HttpError(404, 'not_connected', 'Connect Up first.');
-  const summary = await syncUpConnection(conn, deps(env));
-  return json(200, { ok: true, ...summary });
-}
-
 async function disconnectUp(env: CloudEnv, member: Member): Promise<Response> {
   const conn = await env.repo.findConnection(member.householdId, member.person, 'up');
   if (!conn) return json(200, { ok: true });
@@ -133,6 +126,45 @@ async function disconnectUp(env: CloudEnv, member: Member): Promise<Response> {
   await env.repo.releaseAccounts(member.householdId, 'up', member.person);
   await env.repo.deleteConnection(conn.id);
   return json(200, { ok: true, warning });
+}
+
+async function connectSnapTrade(req: Request, env: CloudEnv, member: Member): Promise<Response> {
+  limit(env, `connect:${member.userId}`, 5, 'Too many attempts. Wait a minute and try again.');
+  const body = await readJson<{ clientId?: unknown; consumerKey?: unknown; visibility?: unknown }>(req);
+  const creds = parseSnapTradeCredentials(body);
+  const visibility = body.visibility === 'shared' ? 'shared' : 'private';
+  // Check the key works before storing anything.
+  await new SnapTradeClient(creds, env.fetchImpl).accounts();
+  const conn = await env.repo.insertConnection({
+    householdId: member.householdId,
+    person: member.person,
+    provider: 'snaptrade',
+    secretCiphertext: encrypt(env.key, JSON.stringify(creds)),
+    webhookId: null,
+    webhookSecretCiphertext: null,
+    newAccountVisibility: visibility,
+    status: 'pending',
+    statusMessage: null,
+    lastSyncAt: null,
+  });
+  const summary = await syncConnection(conn, deps(env));
+  return json(200, { ok: true, ...summary, message: `Connected. ${summary.accounts} investment account${summary.accounts === 1 ? '' : 's'} and ${summary.positions ?? 0} holdings loaded. Values refresh daily and when you press Refresh.` });
+}
+
+async function syncProvider(env: CloudEnv, member: Member, provider: 'up' | 'snaptrade'): Promise<Response> {
+  limit(env, `sync:${member.userId}`, 6, 'Too many refreshes. Wait a minute and try again.');
+  const conn = await env.repo.findConnection(member.householdId, member.person, provider);
+  if (!conn) throw new HttpError(404, 'not_connected', `Connect ${provider === 'up' ? 'Up' : 'SnapTrade'} first.`);
+  const summary = await syncConnection(conn, deps(env));
+  return json(200, { ok: true, ...summary });
+}
+
+async function disconnectSnapTrade(env: CloudEnv, member: Member): Promise<Response> {
+  const conn = await env.repo.findConnection(member.householdId, member.person, 'snaptrade');
+  if (!conn) return json(200, { ok: true });
+  await env.repo.releaseAccounts(member.householdId, 'snaptrade', member.person);
+  await env.repo.deleteConnection(conn.id);
+  return json(200, { ok: true, warning: 'Disconnected. Delete the key in your SnapTrade dashboard too, so it can never be used again.' });
 }
 
 async function deleteAccount(req: Request, env: CloudEnv, member: Member): Promise<Response> {
@@ -174,11 +206,11 @@ async function upWebhook(req: Request, env: CloudEnv, connectionId: string): Pro
 
 async function dailyCron(req: Request, env: CloudEnv): Promise<Response> {
   if (!env.cronSecret || bearer(req) !== env.cronSecret) return json(401, { error: 'unauthorised' });
-  const conns = (await env.repo.listConnections()).filter((c) => c.provider === 'up' && c.status !== 'revoked');
+  const conns = (await env.repo.listConnections()).filter((c) => c.status !== 'revoked');
   const results: { id: string; ok: boolean }[] = [];
   for (const c of conns) {
     try {
-      await syncUpConnection(c, deps(env));
+      await syncConnection(c, deps(env));
       results.push({ id: c.id, ok: true });
     } catch {
       results.push({ id: c.id, ok: false });
@@ -211,7 +243,10 @@ export async function cloudApi(req: Request, env: CloudEnv): Promise<Response | 
   if (path === '/api/cron/daily' && method === 'GET') return dailyCron(req, env);
 
   if (path === '/api/up/connect' && method === 'POST') return connectUp(req, env, await member());
-  if (path === '/api/up/sync' && method === 'POST') return syncMine(env, await member());
+  if (path === '/api/up/sync' && method === 'POST') return syncProvider(env, await member(), 'up');
+  if (path === '/api/snaptrade/connect' && method === 'POST') return connectSnapTrade(req, env, await member());
+  if (path === '/api/snaptrade/sync' && method === 'POST') return syncProvider(env, await member(), 'snaptrade');
+  if (path === '/api/snaptrade/disconnect' && method === 'POST') return disconnectSnapTrade(env, await member());
   if (path === '/api/up/disconnect' && method === 'POST') return disconnectUp(env, await member());
   if (path === '/api/account/delete' && method === 'POST') return deleteAccount(req, env, await member());
   if (path === '/api/listing/fetch' && method === 'GET') return listingFetch(url, env, await member());

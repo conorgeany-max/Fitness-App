@@ -4,6 +4,7 @@
  * them; nothing is estimated.
  */
 import { decrypt } from '../vault';
+import { mapSnapTradeAccount, mapSnapTradePositions, SnapTradeClient, type SnapTradeCredentials } from '../providers/snaptrade';
 import { mapUpAccount, mapUpTransaction, UpClient, type UpWebhookEvent } from '../providers/up';
 import { HttpError, type ConnectionRow, type Repo } from './types';
 
@@ -26,6 +27,7 @@ export interface SyncDeps {
 export interface SyncSummary {
   accounts: number;
   transactions: number;
+  positions?: number;
 }
 
 export function upClientFor(conn: ConnectionRow, deps: SyncDeps): UpClient {
@@ -84,4 +86,45 @@ export async function applyUpEvent(conn: ConnectionRow, event: UpWebhookEvent, d
   await deps.repo.upsertTransactions(accountId, [mapUpTransaction(txn)]);
   await deps.repo.updateConnection(conn.id, { status: 'active', statusMessage: null });
   return 'updated';
+}
+
+export function snapTradeClientFor(conn: ConnectionRow, deps: SyncDeps): SnapTradeClient {
+  return new SnapTradeClient(JSON.parse(decrypt(deps.key, conn.secretCiphertext)) as SnapTradeCredentials, deps.fetchImpl, deps.now);
+}
+
+/** Reads every account and its holdings. Accounts SnapTrade no longer reports are left as they were. */
+export async function syncSnapTradeConnection(conn: ConnectionRow, deps: SyncDeps): Promise<SyncSummary> {
+  const now = deps.now?.() ?? new Date();
+  const client = snapTradeClientFor(conn, deps);
+  try {
+    const accounts = await client.accounts();
+    let positions = 0;
+    for (const a of accounts) {
+      let holdings = null;
+      try {
+        holdings = await client.holdings(a.id);
+      } catch (e) {
+        if (!(e instanceof HttpError) || e.status === 401) throw e;
+      }
+      const mapped = mapSnapTradeAccount(a, holdings, now.toISOString());
+      if (!mapped) continue;
+      const id = await deps.repo.upsertAccount(conn.householdId, { provider: 'snaptrade', owner: conn.person, joint: false, defaultVisibility: conn.newAccountVisibility, institution: a.institution_name, account: mapped });
+      await deps.repo.recordBalance(id, auDate(now), mapped.balanceCents);
+      if (holdings) {
+        const p = mapSnapTradePositions(holdings);
+        positions += p.length;
+        await deps.repo.replacePositions(id, p);
+      }
+    }
+    await deps.repo.updateConnection(conn.id, { status: 'active', statusMessage: null, lastSyncAt: now.toISOString() });
+    return { accounts: accounts.length, transactions: 0, positions };
+  } catch (e) {
+    const message = e instanceof HttpError ? e.message : 'Sync failed unexpectedly.';
+    await deps.repo.updateConnection(conn.id, { status: 'error', statusMessage: message });
+    throw e;
+  }
+}
+
+export function syncConnection(conn: ConnectionRow, deps: SyncDeps): Promise<SyncSummary> {
+  return conn.provider === 'snaptrade' ? syncSnapTradeConnection(conn, deps) : syncUpConnection(conn, deps);
 }

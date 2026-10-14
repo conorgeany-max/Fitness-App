@@ -152,7 +152,7 @@ export function providerHolding(row: ProviderAccountRow, balances: ProviderBalan
     : {
         id: providerHoldingId(row.id),
         kind: liability ? 'liability' : 'asset',
-        category: TYPE_TO_CATEGORY[row.account_type as ObAccountType] ?? (liability ? 'other-liability' : 'other-asset'),
+        category: row.account_type === 'investment' && row.currency !== 'AUD' ? 'shares-intl' : TYPE_TO_CATEGORY[row.account_type as ObAccountType] ?? (liability ? 'other-liability' : 'other-asset'),
         name: row.name,
         institution: row.institution,
         ownership,

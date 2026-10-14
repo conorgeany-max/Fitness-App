@@ -223,6 +223,8 @@ export function CloudConnections() {
         </div>
       </Card>
 
+      <SnapTradeCard conns={conns} reload={reload} />
+
       {confirmDisconnect && (
         <Modal
           open
@@ -243,6 +245,91 @@ export function CloudConnections() {
         </Modal>
       )}
     </div>
+  );
+}
+
+function SnapTradeCard({ conns, reload }: { conns: ConnectionStatus[]; reload: () => Promise<void> }) {
+  const session = useSession();
+  const pullCloud = useApp((s) => s.pullCloud);
+  const [clientId, setClientId] = useState('');
+  const [consumerKey, setConsumerKey] = useState('');
+  const [visibility, setVisibility] = useState<'shared' | 'private'>('shared');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ tone: 'good' | 'bad'; text: string } | null>(null);
+  const mine = conns.find((c) => c.person === session.member.person && c.provider === 'snaptrade');
+
+  const act = async (label: string, path: string, body: unknown, done: (r: Record<string, unknown>) => string) => {
+    setBusy(label);
+    setMessage(null);
+    try {
+      const r = await api<Record<string, unknown>>(path, { body });
+      setMessage({ tone: 'good', text: done(r) });
+      await pullCloud();
+    } catch (e) {
+      setMessage({ tone: 'bad', text: e instanceof Error ? e.message : 'Something went wrong.' });
+    } finally {
+      await reload().catch(() => undefined);
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader title="Shares and ETFs (SnapTrade)" subtitle="Values of brokerage accounts such as Stake, CommSec, Interactive Brokers and others SnapTrade supports." />
+      <div className="space-y-4 px-5 pb-5">
+        {mine ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge tone={STATUS_TONE[mine.status]}>{mine.status === 'active' ? 'Connected' : mine.status === 'error' ? 'Needs attention' : mine.status}</Badge>
+              {mine.last_sync_at && <span className="text-muted">Last updated {formatDate(mine.last_sync_at.slice(0, 10))}</span>}
+            </div>
+            {mine.status_message && <Callout tone="bad">{mine.status_message}</Callout>}
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={!!busy} onClick={() => act('refresh', '/api/snaptrade/sync', {}, (r) => `Refreshed ${String(r.accounts)} accounts.`)}>
+                <RefreshCw className="h-4 w-4" /> {busy === 'refresh' ? 'Refreshing…' : 'Refresh now'}
+              </Button>
+              <Button variant="ghost" disabled={!!busy} onClick={() => act('disconnect', '/api/snaptrade/disconnect', {}, (r) => String(r.warning ?? 'Disconnected.'))}>
+                <Unplug className="h-4 w-4" /> Disconnect
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3 rounded-lg border border-line p-4">
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-2">
+              <li>
+                Sign up at{' '}
+                <a className="underline" href="https://dashboard.snaptrade.com" target="_blank" rel="noreferrer">
+                  dashboard.snaptrade.com <ExternalLink className="inline h-3 w-3" />
+                </a>{' '}
+                on the Personal plan and create an API key.
+              </li>
+              <li>In SnapTrade, connect your brokerages and choose read-only access.</li>
+              <li>Paste the Client ID and Consumer Key here. They are encrypted on the server and never shown again.</li>
+            </ol>
+            <Callout tone="info">This app only reads balances and holdings. It never calls SnapTrade's trading functions. Choosing read-only connections in SnapTrade means the key couldn't place trades even if it leaked.</Callout>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TextInput label="Client ID" autoComplete="off" spellCheck={false} value={clientId} onChange={(e) => setClientId(e.target.value)} />
+              <TextInput label="Consumer Key" type="password" autoComplete="off" spellCheck={false} value={consumerKey} onChange={(e) => setConsumerKey(e.target.value)} />
+            </div>
+            <Segmented ariaLabel="Default privacy" value={visibility} onChange={setVisibility} options={[{ value: 'shared', label: 'Shared with my partner' }, { value: 'private', label: 'Private to me' }]} />
+            <Button
+              variant="primary"
+              disabled={!!busy || !clientId.trim() || consumerKey.trim().length < 16}
+              onClick={() =>
+                act('connect', '/api/snaptrade/connect', { clientId: clientId.trim(), consumerKey: consumerKey.trim(), visibility }, (r) => {
+                  setClientId('');
+                  setConsumerKey('');
+                  return String(r.message);
+                })
+              }
+            >
+              {busy === 'connect' ? 'Connecting…' : 'Connect SnapTrade'}
+            </Button>
+          </div>
+        )}
+        {message && <Callout tone={message.tone}>{message.text}</Callout>}
+      </div>
+    </Card>
   );
 }
 
