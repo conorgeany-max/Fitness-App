@@ -1,16 +1,14 @@
 import { useState } from 'react';
 import { ClipboardPaste, Globe, Home as HomeIcon, Loader2, Plus, Star, Trash2 } from 'lucide-react';
-import { emptyListing, parseListingText, parseListingUrl } from '@/domain/property/listingParser';
 import { formatMoney } from '@/domain/money';
-import type { PropertyAnalysis, PropertyListing, PropertyPurchaseSettings } from '@/domain/types';
-import { uid } from '@/lib/id';
-import { defaultPurchaseSettings } from '@/store/demo';
+import type { PropertyAnalysis, PropertyPurchaseSettings } from '@/domain/types';
 import { useDerived } from '@/store/derived';
 import { useApp } from '@/store/store';
 import { Badge, Button, Callout, Card, CardHeader, Disclosure, MoneyInput, NumberInput, PercentInput, Select, TextArea, TextInput, Toggle, cx, toast } from '@/components/ui';
 import { ListingReview } from './ListingReview';
 import { AffordabilityView } from './AffordabilityView';
-import { LABEL_META, usePrepared } from './analysis';
+import { LABEL_META, newAnalysis, usePrepared } from './analysis';
+import { authFetch } from '@/cloud/authFetch';
 
 export function Analyser({ selectedId, onSelect }: { selectedId: string | null; onSelect: (id: string | null) => void }) {
   const properties = useApp((s) => s.data.properties);
@@ -80,7 +78,7 @@ function NewAnalysis({ onCreated }: { onCreated: (id: string) => void }) {
     setFetching(true);
     setFetchMsg(null);
     try {
-      const res = await fetch(`/api/listing/fetch?url=${encodeURIComponent(url.trim())}`);
+      const res = await authFetch(`/api/listing/fetch?url=${encodeURIComponent(url.trim())}`);
       const body = (await res.json().catch(() => null)) as { ok?: boolean; text?: string; message?: string } | null;
       if (res.ok && body?.ok && body.text) {
         setText(body.text);
@@ -96,22 +94,8 @@ function NewAnalysis({ onCreated }: { onCreated: (id: string) => void }) {
   };
 
   const create = (blank = false) => {
-    const listing: PropertyListing = blank ? emptyListing() : text.trim() ? parseListingText(text, url.trim() || undefined) : { ...emptyListing(), ...parseListingUrl(url.trim()) };
-    if (!listing.state.value) listing.state = { value: null, status: 'unavailable' };
-    const now = new Date().toISOString();
-    const name = listing.address.value ?? (listing.suburb.value ? `${listing.propertyType.value ?? 'Property'} in ${listing.suburb.value}` : 'New property');
-    const p: PropertyAnalysis = {
-      id: uid('prop'),
-      name,
-      sourceUrl: url.trim() || undefined,
-      rawText: text,
-      fetchStatus: fetchMsg ? { ...fetchMsg, at: now } : undefined,
-      listing,
-      settings: { ...defaultPurchaseSettings() },
-      shortlisted: false,
-      createdAt: now,
-      updatedAt: now,
-    };
+    const p = newAnalysis({ text, url, blank, fetchStatus: fetchMsg });
+    const listing = p.listing;
     upsert(p);
     const found = Object.values(listing).filter((f) => f.status === 'extracted').length;
     toast(blank ? 'Blank analysis created' : `${found} detail(s) extracted — please review them`, found || blank ? 'good' : 'info');

@@ -3,11 +3,12 @@ import { PageHeader, Tabs } from '@/components/ui';
 import { useApp } from '@/store/store';
 import { Analyser } from './property/Analyser';
 import { Shortlist } from './property/Shortlist';
+import { Screener } from './property/Screener';
 import { MortgageCalculator } from './property/MortgageCalculator';
 import { DebtDashboard, StampDutyEstimator } from './property/DebtsAndDuty';
 
-type Tab = 'analyse' | 'shortlist' | 'mortgage' | 'debts' | 'duty';
-const TABS: Tab[] = ['analyse', 'shortlist', 'mortgage', 'debts', 'duty'];
+type Tab = 'screener' | 'analyse' | 'shortlist' | 'mortgage' | 'debts' | 'duty';
+const TABS: Tab[] = ['screener', 'analyse', 'shortlist', 'mortgage', 'debts', 'duty'];
 
 export default function Property() {
   const [params, setParams] = useSearchParams();
@@ -24,6 +25,7 @@ export default function Property() {
         value={tab}
         onChange={(t) => go(t, t === 'analyse' ? selectedId : undefined)}
         tabs={[
+          { value: 'screener', label: 'House screener', count: properties.length || undefined },
           { value: 'analyse', label: 'Property analyser' },
           { value: 'shortlist', label: 'Shortlist', count: properties.filter((p) => p.shortlisted).length || undefined },
           { value: 'mortgage', label: 'Mortgage calculator' },
@@ -31,6 +33,7 @@ export default function Property() {
           { value: 'duty', label: 'Stamp duty' },
         ]}
       />
+      {tab === 'screener' && <Screener onOpen={(id) => go('analyse', id)} />}
       {tab === 'analyse' && <Analyser selectedId={selectedId} onSelect={(id) => go('analyse', id)} />}
       {tab === 'shortlist' && <Shortlist onOpen={(id) => go('analyse', id)} />}
       {tab === 'mortgage' && <MortgageCalculator />}

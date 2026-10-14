@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
 import { analyseAffordability, DEFAULT_THRESHOLDS, maxPriceForLabel, type AffordabilityResult, type MarketAssumptions, type PropertyCosts } from '@/domain/property/affordability';
-import type { PropertyAnalysis, WorkspaceData } from '@/domain/types';
+import { emptyListing, parseListingText, parseListingUrl } from '@/domain/property/listingParser';
+import type { PropertyAnalysis, PropertyListing, WorkspaceData } from '@/domain/types';
+import { uid } from '@/lib/id';
+import { defaultPurchaseSettings } from '@/store/demo';
 import { householdFinancials } from '@/store/builders';
 import { derive } from '@/store/derived';
 import { useApp } from '@/store/store';
@@ -76,3 +79,70 @@ export const LABEL_META = {
   stretched: { text: 'Stretched', tone: 'warn' as const },
   'not-supported': { text: 'Not supported by your numbers', tone: 'bad' as const },
 };
+
+/** A new analysis from pasted listing text and/or a link. Only what the text says is filled in. */
+export function newAnalysis(opts: { text: string; url?: string; blank?: boolean; fetchStatus?: { ok: boolean; message: string } | null }): PropertyAnalysis {
+  const url = opts.url?.trim() || undefined;
+  const listing: PropertyListing = opts.blank ? emptyListing() : opts.text.trim() ? parseListingText(opts.text, url) : { ...emptyListing(), ...(url ? parseListingUrl(url) : {}) };
+  if (!listing.state.value) listing.state = { value: null, status: 'unavailable' };
+  const now = new Date().toISOString();
+  const name = listing.address.value ?? (listing.suburb.value ? `${listing.propertyType.value ?? 'Property'} in ${listing.suburb.value}` : 'New property');
+  return {
+    id: uid('prop'),
+    name,
+    sourceUrl: url,
+    rawText: opts.text,
+    fetchStatus: opts.fetchStatus ? { ...opts.fetchStatus, at: now } : undefined,
+    listing,
+    settings: { ...defaultPurchaseSettings() },
+    shortlisted: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export interface DomainListingRow {
+  id: string;
+  url: string | null;
+  headline: string | null;
+  address: string | null;
+  suburb: string | null;
+  state: string | null;
+  postcode: string | null;
+  propertyType: string | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  parking: number | null;
+  landSqm: number | null;
+  priceText: string | null;
+  priceCents: number | null;
+  summary: string | null;
+}
+
+const STATES = ['VIC', 'NSW', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'];
+
+/** An analysis from a Domain search result. Fields Domain didn't give stay empty. */
+export function analysisFromDomain(d: DomainListingRow): PropertyAnalysis {
+  const text = [d.address, d.headline, d.priceText, d.summary].filter(Boolean).join('\n');
+  const p = newAnalysis({ text: '', url: d.url ?? undefined, blank: true });
+  const f = <T,>(value: T | null) => (value === null || value === undefined ? { value: null, status: 'unavailable' as const } : { value, status: 'extracted' as const, evidence: 'Domain listing data' });
+  const titleCase = (s: string | null) => (s ? s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : null);
+  const state = d.state && STATES.includes(d.state.toUpperCase()) ? (d.state.toUpperCase() as PropertyListing['state']['value']) : null;
+  p.listing = {
+    ...p.listing,
+    address: f(d.address),
+    suburb: f(titleCase(d.suburb)),
+    state: f(state),
+    postcode: f(d.postcode),
+    propertyType: f(d.propertyType),
+    priceCents: f(d.priceCents),
+    priceText: f(d.priceText),
+    bedrooms: f(d.bedrooms),
+    bathrooms: f(d.bathrooms),
+    parking: f(d.parking),
+    landSizeSqm: f(d.landSqm),
+  };
+  p.rawText = text;
+  p.name = d.address ?? (d.suburb ? `${d.propertyType ?? 'Property'} in ${titleCase(d.suburb)}` : 'Domain listing');
+  return p;
+}

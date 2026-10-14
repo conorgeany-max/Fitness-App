@@ -1,5 +1,6 @@
 import type { Cents, FxTable } from './money';
 import type { ISODate, MonthKey } from './dates';
+import type { ScreenCriteria } from './property/screener';
 
 export type PersonId = 'me' | 'partner';
 export type Perspective = 'household' | PersonId;
@@ -496,6 +497,8 @@ export interface PropertyAnalysis {
   settings: PropertyPurchaseSettings;
   shortlisted: boolean;
   notes?: string;
+  /** Door-to-door commute in minutes, entered by the household (used by the screener). */
+  commuteMinutes?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -523,6 +526,8 @@ export interface Settings {
   taxYearOverride?: string;
   onboarded: boolean;
   autoSnapshot: boolean;
+  /** House screener criteria, shared by both partners. */
+  screener?: ScreenCriteria;
 }
 
 export interface WorkspaceData {
