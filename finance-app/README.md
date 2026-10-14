@@ -94,5 +94,5 @@ finance-app/
 
 1. **Live bank data.** You need a production agreement with an accredited provider, such as Basiq, or your own CDR accreditation or representative arrangement. The adapter is written against Basiq's v3 API but has only been exercised against the mock provider here. Verify the endpoints against the sandbox first.
 2. **Authentication.** There are no app accounts by design. To use the app anywhere but your own computer, put it behind an identity provider (OIDC) as described in docs/SECURITY.md.
-3. **Rule sets.** The 2026-27 and later tax rule sets, and NSW and QLD duty, are marked provisional. Confirm them against the ATO and state revenue offices when published. Stamp duty for WA, SA, TAS, ACT and NT is not configured yet.
+3. **Rule sets.** The 2026-27 and later tax rule sets, and stamp duty for every state except Victoria, are marked provisional. Confirm them against the ATO and state revenue offices (docs/RULESETS.md).
 4. **Property data.** No market data source is integrated. Valuations, rents and comparable sales are whatever you enter, labelled as such.

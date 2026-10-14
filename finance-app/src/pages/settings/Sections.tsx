@@ -481,7 +481,7 @@ export function RulesAndSources() {
         </div>
       </Card>
       <Card>
-        <CardHeader title="Stamp duty" subtitle="Other states are not configured; the app asks for your own estimate rather than borrowing another state's rates." />
+        <CardHeader title="Stamp duty" subtitle="Every state and territory has its own rule set. Concessions that aren't modelled are listed as notes to check, and one state's rates are never used for another." />
         <div className="divide-y divide-line px-5 pb-2">
           {duty.map((d) => (
             <RulesetRow key={d.state} title={d.state} status={d.status === 'confirmed' ? 'confirmed' : 'provisional'} meta={`Rule set ${d.rulesetId} · effective ${formatDate(d.effectiveFrom)}`} sources={d.sources} />

@@ -32,9 +32,13 @@ Tax, super and stamp duty figures are data, not code paths. Each rule set has an
 | VIC | VIC-2025-07 | Confirmed | PPR, first home buyer exemption and concession |
 | NSW | NSW-2026-07 | Provisional (indexed thresholds) | First Home Buyers Assistance |
 | QLD | QLD-2025-05 | Provisional | Home concession, first home (including new homes) |
-| WA, SA, TAS, ACT, NT | none | Not configured | |
+| SA | SA-2025-07 | Provisional | First home buyer exemption on new homes and land to build on |
+| WA | WA-2025-07 | Provisional | None. First home owner rates changed three times in 2024–26 and are left as a note. |
+| TAS | TAS-2025-07 | Provisional | None. The established-home first home exemption ended 30 June 2026. |
+| ACT | ACT-2026-07 | Provisional, up to $1,000,000 | Owner-occupier rates; Home Buyer Concession Scheme (no price cap or income test from 1 July 2026) |
+| NT | NT-2017-07 | Provisional | None (house and land package exemption is left as a note) |
 
-States without a rule set return `supported: false` and the analyser asks for your own estimate. One state's rates are never applied to another state.
+The SA, WA, TAS, ACT and NT figures were taken from secondary sources that quote the revenue offices, because the official pages couldn't be reached while building. Check each against its linked source before marking it confirmed. ACT purchases above $1,000,000 return `supported: false` and the analyser asks for your own estimate. One state's rates are never applied to another state.
 
 Not modelled anywhere: foreign purchaser surcharges, off-the-plan concessions, pensioner concessions and grants. The UI lists these as items to confirm.
 

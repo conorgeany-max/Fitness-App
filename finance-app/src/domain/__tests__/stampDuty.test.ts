@@ -40,9 +40,25 @@ describe('stamp duty', () => {
     expect(estimateStampDuty({ state: 'QLD', priceCents: 70000000, ownerOccupier: false, firstHomeBuyer: false }).dutyCents).toBe(2452500);
   });
 
-  it('states without a ruleset are reported as unsupported', () => {
-    const r = estimateStampDuty({ state: 'WA', priceCents: 60000000, ownerOccupier: true, firstHomeBuyer: false });
-    expect(r.supported).toBe(false);
-    expect(r.status).toBe('unsupported');
+  it('other states use their own published scales', () => {
+    const at = (state: 'SA' | 'WA' | 'TAS' | 'NT', price: number) => estimateStampDuty({ state, priceCents: price * 100, ownerOccupier: true, firstHomeBuyer: false }).dutyCents / 100;
+    expect(at('SA', 500000)).toBe(21330);
+    expect(at('WA', 500000)).toBe(17765);
+    expect(at('TAS', 500000)).toBe(18248);
+    expect(at('NT', 500000)).toBe(23929);
+    // NT switches from the formula to a flat 4.95% at $525,000 with no jump.
+    expect(Math.abs(at('NT', 525000) - at('NT', 525100))).toBeLessThan(10);
+  });
+
+  it('ACT: investor and owner-occupier scales, home buyer concession, and no estimate above $1m', () => {
+    expect(estimateStampDuty({ state: 'ACT', priceCents: 58000000, ownerOccupier: false, firstHomeBuyer: false }).dutyCents).toBe(1485600);
+    expect(estimateStampDuty({ state: 'ACT', priceCents: 58000000, ownerOccupier: true, firstHomeBuyer: false }).dutyCents).toBe(1186400);
+    expect(estimateStampDuty({ state: 'ACT', priceCents: 90000000, ownerOccupier: true, firstHomeBuyer: true }).dutyCents).toBe(0);
+    expect(estimateStampDuty({ state: 'ACT', priceCents: 120000000, ownerOccupier: true, firstHomeBuyer: false }).supported).toBe(false);
+  });
+
+  it('SA exempts first home buyers of new homes only', () => {
+    expect(estimateStampDuty({ state: 'SA', priceCents: 60000000, ownerOccupier: true, firstHomeBuyer: true, newHome: true }).dutyCents).toBe(0);
+    expect(estimateStampDuty({ state: 'SA', priceCents: 60000000, ownerOccupier: true, firstHomeBuyer: true }).dutyCents).toBeGreaterThan(0);
   });
 });

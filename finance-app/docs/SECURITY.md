@@ -1,8 +1,11 @@
 # Security and privacy
 
-## Model
+## Two ways to run it
 
-This app is built for one household on one computer.
+- **Local version** (`npm run dev` / `npm start`): one household on one computer. Described in the first sections below.
+- **Hosted version** (Supabase + Vercel, [DEPLOY.md](DEPLOY.md)): each partner signs in separately from any device. Described under **Hosted version**.
+
+## Local version
 
 | Layer | Protection |
 |---|---|
@@ -24,15 +27,26 @@ This app is built for one household on one computer.
 
 **Limitation.** On a shared device in local mode, "who is using the app" is a display control. Anyone with the browser profile (and the passphrase, if one is set) can switch users. For real separation, each partner should use their own browser profile or device, or the app should be deployed with per-user sign-in as described below.
 
+## Hosted version
+
+| Layer | Protection |
+|---|---|
+| Sign-in | Supabase Auth: email and password (12+ characters) plus a TOTP authenticator code. No home-made password handling. Lost authenticators are reset by the Supabase project owner, not by email. |
+| Database access | Postgres row level security. Every policy requires a two-factor (`aal2`) session, so a stolen password alone reads nothing. |
+| Partner separation | Enforced by the database, not the app. Each person's private document, private accounts and transactions are readable only by them. The partner sees a person's private items only through `private_summaries`, which holds totals the owner chose to share. |
+| Provider tokens | Up tokens and SnapTrade keys are encrypted with AES-256-GCM (`SERVER_ENCRYPTION_KEY`) before storage. Token columns are never granted to browser sessions; only the server, with the service role key, can read them. |
+| Server secrets | `SUPABASE_SERVICE_ROLE_KEY`, `SERVER_ENCRYPTION_KEY`, `CRON_SECRET`, `ANTHROPIC_API_KEY` and Domain credentials live only in Vercel's environment. The browser bundle contains only the Supabase URL and anon key, which are public by design. |
+| Webhooks and cron | Up webhooks are checked with HMAC-SHA256 against a per-connection secret. The daily sync requires `CRON_SECRET`. |
+| Headers | `vercel.json` sets a strict CSP (scripts from the site only; connections only to Supabase), HSTS, `frame-ancestors 'none'`, nosniff and no-referrer. API responses are `no-store`. |
+| Money movement | None. Up's personal token can also change a transaction's category and tags, but it cannot move money; this app never calls those endpoints. SnapTrade is used read-only and never places trades. |
+| AI assistant | Off until each person turns it on. It receives only computed totals the person can already see, has no tools, and every number in its answer is inserted by the server from those totals. A household monthly ceiling (default A$10) is checked before each call. |
+| Account deletion | Settings → Data → Delete my account disconnects the person's providers, deletes their private data, their membership and their login. |
+
 ## No home-made authentication
 
-The app has no login system on purpose. Password storage, sessions and recovery are easy to get wrong.
+The local version has no login system on purpose; the hosted version uses Supabase Auth. Password storage, sessions and recovery are easy to get wrong.
 
-To reach the app from anywhere other than the machine it runs on:
-
-1. Put it behind an **identity-aware proxy or OIDC provider**. Examples: Cloudflare Access, Tailscale with ACLs, oauth2-proxy with Google or Microsoft accounts, or Auth0. Allow exactly two identities.
-2. Serve it over HTTPS, set `PUBLIC_URL`, and keep `HOST=127.0.0.1` behind the proxy.
-3. For per-partner separation enforced by the server, workspace data would need to move server-side with per-user keys. That is not built.
+To reach the local version from anywhere other than the machine it runs on, put it behind an **identity-aware proxy or OIDC provider** (Cloudflare Access, Tailscale with ACLs, oauth2-proxy) allowing exactly two identities, serve it over HTTPS, set `PUBLIC_URL`, and keep `HOST=127.0.0.1`. Or use the hosted version.
 
 ## Backups
 

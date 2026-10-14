@@ -1,5 +1,7 @@
 # Open banking (Consumer Data Right)
 
+> **The hosted version doesn't use CDR.** Both of you bank with Up, which offers each customer a free personal API token, and shares come from SnapTrade's free Personal plan. See **Hosted version: Up and SnapTrade** at the end. The rest of this page describes the local version's CDR adapter (Basiq), kept for banks without a personal API.
+
 ## What this build does
 
 - **Reads only.** Accounts, balances and transactions come in through a provider adapter on the local server. Nothing can move money, make payments or trade.
@@ -49,3 +51,20 @@ Adding another provider means implementing `ProviderAdapter` in `server/provider
 3. **Retention.** The CDR rules require deleting or de-identifying CDR data when consent expires or is withdrawn, unless an exception applies. Choose **Delete synced accounts and transactions** when disconnecting, or decide on a retention policy and document it.
 4. **Deployment.** Set `SERVER_ENCRYPTION_KEY`. Keep the server on `127.0.0.1` or behind an identity provider (see SECURITY.md). Use HTTPS and set `PUBLIC_URL` so the consent return and origin checks match.
 5. **Testing.** Exercise each failure mode (expired consent, provider errors, re-syncs, duplicates) with sandbox institutions before connecting a real bank.
+
+## Hosted version: Up and SnapTrade
+
+**Up** (`server/providers/up.ts`, `server/cloud/sync.ts`)
+
+- Each person pastes their own Personal Access Token in Settings → Connections. It is checked with Up's `/util/ping`, encrypted with AES-256-GCM and stored server-side. The browser never gets it back.
+- The server reads accounts and transactions, and registers a webhook so new transactions arrive within seconds. Webhook calls are verified with HMAC-SHA256. A daily cron re-syncs as a safety net.
+- **What the token allows.** Up's personal token is read-only for money: it cannot make payments or transfers. It can also change a transaction's category and tags. This app never calls those endpoints, but anyone holding the token could, which is why it is encrypted and never sent back to the browser. Revoke it in the Up app at any time.
+- **Disconnect** deletes the stored token and webhook. Synced history is kept unless the person deletes their account.
+- Up is not a CDR data recipient arrangement: it is the customer using their own bank's API. No accreditation is claimed.
+
+**SnapTrade** (`server/providers/snaptrade.ts`)
+
+- Each person signs up for SnapTrade's Personal plan, links their brokers in SnapTrade's own dashboard, and pastes their Client ID and Consumer Key here. Both are encrypted like the Up token.
+- The server signs each request (HMAC-SHA256) and reads accounts and holdings only. No trading endpoint is called.
+
+Every synced balance is labelled `live` with its provider and last sync time. A connection that fails shows **error** and changes nothing else.

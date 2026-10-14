@@ -99,7 +99,7 @@ function Assistant() {
         </ul>
         <div>
           <ProgressBar value={Math.min(1, status.spentAud / status.capAud)} tone={status.spentAud / status.capAud > 0.8 ? 'warn' : 'accent'} label={`A$${status.spentAud.toFixed(2)} of A$${status.capAud.toFixed(2)} used this month`} />
-          <p className="mt-1 text-xs text-muted">A${'$'}{status.spentAud.toFixed(2)} of A${'$'}{status.capAud.toFixed(2)} used this month. A hard limit shared by the household. Questions stop when it's reached and start again on the 1st.</p>
+          <p className="mt-1 text-xs text-muted">A${status.spentAud.toFixed(2)} of A${status.capAud.toFixed(2)} used this month. A hard limit shared by the household. Questions stop when it's reached and start again on the 1st.</p>
         </div>
         <Disclosure summary={`The ${facts.length} figures it can see (${perspective === 'household' ? 'household view' : `${d.names[perspective]}'s view`})`}>
           <ul className="grid gap-x-6 gap-y-0.5 text-xs sm:grid-cols-2">
