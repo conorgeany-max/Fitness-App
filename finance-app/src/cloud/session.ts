@@ -21,6 +21,7 @@ import {
   type PrivateSummary,
   type ProviderAccountRow,
   type ProviderBalanceRow,
+  type ProviderPositionRow,
   type ProviderData,
   type ProviderTxnRow,
   type SharedDoc,
@@ -117,16 +118,17 @@ export class CloudSession {
       this.sb.from('provider_accounts').select('id, provider, external_id, owners, joint, visibility, name, account_type, institution, currency, balance_cents, available_cents, as_at').eq('household_id', hid).order('id').range(a, b),
     );
     const ids = accounts.map((a) => a.id);
-    const [transactions, balances] = ids.length
+    const [transactions, balances, positions] = ids.length
       ? await Promise.all([
           pages<ProviderTxnRow>((a, b) =>
             this.sb.from('provider_transactions').select('account_id, external_id, date, description, amount_cents, pending, merchant, transfer_external_id').in('account_id', ids).order('date', { ascending: false }).order('external_id').range(a, b),
           ),
           pages<ProviderBalanceRow>((a, b) => this.sb.from('provider_balances').select('account_id, date, balance_cents').in('account_id', ids).order('date').order('account_id').range(a, b)),
+          pages<ProviderPositionRow>((a, b) => this.sb.from('provider_positions').select('account_id, symbol, description, units, value_cents, currency').in('account_id', ids).order('account_id').order('symbol').range(a, b)),
         ])
-      : [[], []];
+      : [[], [], []];
     // Up reports a 2Up account and its transactions to both partners; the server stores one copy.
-    this.provider = { accounts, transactions, balances };
+    this.provider = { accounts, transactions, balances, positions };
   }
 
   async load(): Promise<WorkspaceData> {

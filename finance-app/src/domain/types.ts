@@ -1,6 +1,8 @@
 import type { Cents, FxTable } from './money';
 import type { ISODate, MonthKey } from './dates';
 import type { ScreenCriteria } from './property/screener';
+import type { InvestmentTarget } from './allocation';
+import type { PayPlan } from './payPlan';
 
 export type PersonId = 'me' | 'partner';
 export type Perspective = 'household' | PersonId;
@@ -96,6 +98,16 @@ export interface LoanDetails {
   creditLimitCents?: Cents;
 }
 
+/** One fund or share inside a synced brokerage account. Hosted mode only; never saved in documents. */
+export interface Position {
+  symbol: string;
+  description: string | null;
+  units: number;
+  /** Value in the position's own currency. */
+  valueCents: Cents | null;
+  currency: string;
+}
+
 export interface Holding {
   id: string;
   kind: HoldingKind;
@@ -121,6 +133,8 @@ export interface Holding {
   loan?: LoanDetails;
   /** For properties: expected rental income per month. */
   rentalIncomeMonthlyCents?: Cents;
+  /** Funds and shares in a synced brokerage account (from SnapTrade). */
+  positions?: Position[];
   archived?: boolean;
   /**
    * Hosted mode only: a stand-in for the total of one partner's private items in a category,
@@ -528,6 +542,10 @@ export interface Settings {
   autoSnapshot: boolean;
   /** House screener criteria, shared by both partners. */
   screener?: ScreenCriteria;
+  /** Where each person's pay goes each payday. */
+  payPlans?: Partial<Record<PersonId, PayPlan>>;
+  /** How the household wants its shares and ETFs split. */
+  investmentTargets?: InvestmentTarget[];
 }
 
 export interface WorkspaceData {

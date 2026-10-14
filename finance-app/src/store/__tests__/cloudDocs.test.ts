@@ -117,3 +117,17 @@ describe('merge3', () => {
     expect(merge3(base, local, remote)).toEqual({ list: [] });
   });
 });
+
+describe('synced positions', () => {
+  it('attaches fund positions to their account and never saves them in documents', () => {
+    const withPositions: ProviderData = {
+      ...provider,
+      accounts: [...provider.accounts, { id: 'acc-broker', provider: 'snaptrade', external_id: 'st-1', owners: ['me'], joint: false, visibility: 'shared', name: 'Brokerage', account_type: 'investment', institution: 'Stake', currency: 'AUD', balance_cents: 1_000_00, available_cents: null, as_at: '2026-10-14T01:00:00Z' }],
+      positions: [{ account_id: 'acc-broker', symbol: 'VAS', description: 'Vanguard Australian Shares', units: '10', value_cents: '100000', currency: 'AUD' }],
+    };
+    const w = assembleWorkspace({ person: 'me', shared: null, mine: null, partnerSummary: null, provider: withPositions });
+    expect(w.holdings.find((h) => h.id === 'pa_acc-broker')!.positions).toEqual([{ symbol: 'VAS', description: 'Vanguard Australian Shares', units: 10, valueCents: 1_000_00, currency: 'AUD' }]);
+    const { shared } = splitWorkspace(w, 'me', withPositions);
+    expect(JSON.stringify(shared)).not.toContain('VAS');
+  });
+});

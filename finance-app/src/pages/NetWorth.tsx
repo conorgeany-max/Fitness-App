@@ -15,6 +15,7 @@ import { Money, OwnerChip, ScopeBadge, SourceBadge, StatusBadge, UpdatedAt } fro
 import { ChartTooltip, Legend, SERIES, axisProps, gridProps, moneyTick } from '@/components/charts';
 import { HoldingForm, ValuationForm, newHolding } from '@/components/HoldingForm';
 import { StatementUpload } from '@/components/StatementUpload';
+import { InvestmentTargets } from '@/components/InvestmentTargets';
 
 type Metric = keyof NetWorthTotals;
 const METRICS: { key: Metric; label: string }[] = [
@@ -183,6 +184,10 @@ export default function NetWorth() {
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
         <HoldingTable title="Assets" total={bs.assetsCents} items={assets} groupLabels={ASSET_GROUP_LABELS} onEdit={setEditing} onValue={setValuing} onAdd={() => setEditing(newHolding('asset'))} />
         <HoldingTable title="Liabilities" total={bs.liabilitiesCents} items={liabilities} groupLabels={LIABILITY_GROUP_LABELS} onEdit={setEditing} onValue={setValuing} onAdd={() => setEditing(newHolding('liability'))} />
+      </div>
+
+      <div className="mt-5">
+        <InvestmentTargets />
       </div>
 
       {archivedCount > 0 && (

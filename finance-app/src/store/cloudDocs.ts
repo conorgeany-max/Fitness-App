@@ -116,13 +116,23 @@ export interface ProviderBalanceRow {
   balance_cents: number;
 }
 
+export interface ProviderPositionRow {
+  account_id: string;
+  symbol: string;
+  description: string | null;
+  units: number | string;
+  value_cents: number | string | null;
+  currency: string;
+}
+
 export interface ProviderData {
   accounts: ProviderAccountRow[];
   transactions: ProviderTxnRow[];
   balances: ProviderBalanceRow[];
+  positions?: ProviderPositionRow[];
 }
 
-export const EMPTY_PROVIDER: ProviderData = { accounts: [], transactions: [], balances: [] };
+export const EMPTY_PROVIDER: ProviderData = { accounts: [], transactions: [], balances: [], positions: [] };
 
 export const otherPerson = (p: PersonId): PersonId => (p === 'me' ? 'partner' : 'me');
 export const providerHoldingId = (accountId: string) => `pa_${accountId}`;
@@ -139,7 +149,7 @@ function accountIsLiability(row: ProviderAccountRow): boolean {
 const signedToValue = (row: ProviderAccountRow, cents: number) => (accountIsLiability(row) ? Math.abs(cents) : cents);
 
 /** A synced account as a holding, with any edits the household made to it. */
-export function providerHolding(row: ProviderAccountRow, balances: ProviderBalanceRow[], saved: Holding | undefined): Holding {
+export function providerHolding(row: ProviderAccountRow, balances: ProviderBalanceRow[], saved: Holding | undefined, positions: ProviderPositionRow[] = []): Holding {
   const liability = accountIsLiability(row);
   const date = row.as_at.slice(0, 10);
   const history: ValuationEntry[] = balances
@@ -182,6 +192,9 @@ export function providerHolding(row: ProviderAccountRow, balances: ProviderBalan
     externalAccountId: row.external_id,
     lastSyncedAt: row.as_at,
     history,
+    positions: positions
+      .filter((p) => p.account_id === row.id)
+      .map((p) => ({ symbol: p.symbol, description: p.description, units: Number(p.units), valueCents: p.value_cents === null ? null : Number(p.value_cents), currency: p.currency })),
   };
 }
 
@@ -286,7 +299,7 @@ export function assembleWorkspace(input: AssembleInput): WorkspaceData {
   const savedHoldings = [...shared.holdings, ...mine.holdings];
   const savedById = new Map(savedHoldings.map((h) => [h.id, h]));
 
-  const providerHoldings = input.provider.accounts.map((row) => providerHolding(row, input.provider.balances, savedById.get(providerHoldingId(row.id))));
+  const providerHoldings = input.provider.accounts.map((row) => providerHolding(row, input.provider.balances, savedById.get(providerHoldingId(row.id)), input.provider.positions));
   const manualHoldings = savedHoldings.filter((h) => !isProviderHolding(h) && !h.summaryOf);
 
   const holdingIdByAccount = new Map(input.provider.accounts.map((a) => [a.id, providerHoldingId(a.id)]));
@@ -356,7 +369,7 @@ export function isMyPrivate(h: Holding): boolean {
 }
 
 export function splitWorkspace(data: WorkspaceData, person: PersonId, provider: ProviderData, now = new Date().toISOString()): SplitResult {
-  const stripValues = (h: Holding): Holding => (isProviderHolding(h) ? { ...h, valueCents: null, valuedAt: null, availableCents: null, history: [], lastSyncedAt: undefined } : h);
+  const stripValues = (h: Holding): Holding => (isProviderHolding(h) ? { ...h, valueCents: null, valuedAt: null, availableCents: null, history: [], lastSyncedAt: undefined, positions: undefined } : h);
   const holdings = data.holdings.filter((h) => !h.summaryOf);
   const privateIds = new Set(holdings.filter((h) => isMyPrivate(h)).map((h) => h.id));
 

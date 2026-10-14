@@ -11,9 +11,10 @@ import { BillsTab } from './transactions/BillsTab';
 import { RulesTab } from './transactions/RulesTab';
 import { ReconcileTab } from './transactions/ReconcileTab';
 import { ImportTab } from './transactions/ImportTab';
+import { PayPlanTab } from './transactions/PayPlanTab';
 
-type Tab = 'transactions' | 'budget' | 'bills' | 'rules' | 'reconcile' | 'import';
-const TABS: Tab[] = ['transactions', 'budget', 'bills', 'rules', 'reconcile', 'import'];
+type Tab = 'transactions' | 'budget' | 'pay' | 'bills' | 'rules' | 'reconcile' | 'import';
+const TABS: Tab[] = ['transactions', 'budget', 'pay', 'bills', 'rules', 'reconcile', 'import'];
 
 export default function Transactions() {
   const [params, setParams] = useSearchParams();
@@ -38,6 +39,7 @@ export default function Transactions() {
         tabs={[
           { value: 'transactions', label: 'Transactions', count: d.uncategorisedCount || undefined },
           { value: 'budget', label: 'Budget' },
+          { value: 'pay', label: 'Pay plan' },
           { value: 'bills', label: 'Bills' },
           { value: 'rules', label: 'Rules' },
           { value: 'reconcile', label: 'Reconcile', count: toReconcile || undefined },
@@ -46,6 +48,7 @@ export default function Transactions() {
       />
       {tab === 'transactions' && <TransactionList key={filter ?? 'all'} initialFilter={filter === 'uncategorised' ? 'uncategorised' : filter === 'review' ? 'review' : undefined} />}
       {tab === 'budget' && <BudgetTab />}
+      {tab === 'pay' && <PayPlanTab />}
       {tab === 'bills' && <BillsTab />}
       {tab === 'rules' && <RulesTab />}
       {tab === 'reconcile' && <ReconcileTab onShowUncategorised={() => setTab('transactions', { filter: 'uncategorised' })} />}
