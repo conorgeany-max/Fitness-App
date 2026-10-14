@@ -16,6 +16,7 @@
   to = "/index.html"
   status = 200
 
+# These apply to the static site only; API responses set no-store and nosniff in code (server/cloud/http.ts).
 [[headers]]
   for = "/*"
   [headers.values]
@@ -25,8 +26,3 @@
     Referrer-Policy = "no-referrer"
     Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
     X-Frame-Options = "DENY"
-
-[[headers]]
-  for = "/api/*"
-  [headers.values]
-    Cache-Control = "no-store"

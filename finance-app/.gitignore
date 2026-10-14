@@ -6,3 +6,6 @@ dist
 server/.data
 *.log
 coverage
+
+# Netlify CLI link state
+.netlify

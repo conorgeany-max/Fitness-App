@@ -13,8 +13,7 @@ import { limit, type ExtraRoutes } from './routes';
 import { HttpError } from './types';
 
 export const AGENT_MODEL = 'claude-opus-5-5';
-// Kept small, with low effort, so an answer fits inside the host's 30 second function limit.
-const MAX_OUTPUT_TOKENS = 3000;
+const MAX_OUTPUT_TOKENS = 6000;
 const MAX_FACTS = 120;
 // Priced at the highest rate of the model or its possible fallbacks, so the ceiling is never exceeded.
 const USD_PER_INPUT_TOKEN = 5 / 1_000_000;
@@ -156,7 +155,7 @@ export function agentRoutes(cfg: AgentConfig | null): ExtraRoutes {
         max_tokens: MAX_OUTPUT_TOKENS,
         betas: ['server-side-fallback-2026-07-01'],
         fallbacks: 'default',
-        output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA as unknown as Record<string, unknown> } },
+        output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA as unknown as Record<string, unknown> } },
         system: SYSTEM,
         messages: [{ role: 'user', content: `Figures (id, what it is, value):\n${factText}\n\nQuestion: ${question}` }],
       });

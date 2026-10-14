@@ -4,7 +4,7 @@ import { HttpError } from './types';
 export const MAX_BODY = 64 * 1024;
 
 export function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers } });
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers } });
 }
 
 export async function readText(req: Request, limit = MAX_BODY): Promise<string> {
